@@ -349,6 +349,8 @@ function Directory({ contacts, loading }) {
     </div>
   );
 }
+
+function ReportModal({ pendingLocation, onCancel, onSubmit, onRequestPin }) {
   const [category, setCategory] = useState("traffic");
   const [description, setDescription] = useState("");
   const [name, setName] = useState("");
