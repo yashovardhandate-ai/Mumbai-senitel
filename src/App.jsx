@@ -80,12 +80,12 @@ const CATEGORIES = [
 const catInfo = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES[4];
 
 const CONTACT_CATEGORIES = [
-  { id: "police", label: "Police", color: "#3B5F7D" },
-  { id: "fire", label: "Fire", color: "#C13B3B" },
-  { id: "medical", label: "Medical", color: "#4A9A5A" },
-  { id: "bmc", label: "BMC / Civic", color: "#C9862B" },
-  { id: "pwd", label: "PWD / CPWD", color: "#8B6BAE" },
-  { id: "other", label: "Other", color: "#6B6F7A" },
+  { id: "police", label: "Police", color: "#3B5F7D", emoji: "🚓" },
+  { id: "fire", label: "Fire", color: "#C13B3B", emoji: "🚒" },
+  { id: "medical", label: "Medical", color: "#4A9A5A", emoji: "🏥" },
+  { id: "bmc", label: "BMC / Civic", color: "#C9862B", emoji: "🏛️" },
+  { id: "pwd", label: "PWD / CPWD", color: "#8B6BAE", emoji: "🛠️" },
+  { id: "other", label: "Other", color: "#6B6F7A", emoji: "📍" },
 ];
 
 const contactCatInfo = (id) => CONTACT_CATEGORIES.find((c) => c.id === id) || CONTACT_CATEGORIES[5];
@@ -350,6 +350,38 @@ function Directory({ contacts, loading }) {
   );
 }
 
+function OfficeLayerToggles({ activeLayers, onToggle, isOpen, onOpenChange, contactsWithLocation }) {
+  const countFor = (catId) => contactsWithLocation.filter((c) => c.category === catId).length;
+  return (
+    <div className="layer-panel">
+      <button className="layer-panel-toggle" onClick={() => onOpenChange(!isOpen)}>
+        <MapIcon size={13} strokeWidth={2.2} />
+        Office pins
+      </button>
+      {isOpen && (
+        <div className="layer-panel-body">
+          {CONTACT_CATEGORIES.map((c) => (
+            <div className="layer-row" key={c.id}>
+              <span className="layer-row-label">
+                <span>{c.emoji}</span> {c.label}
+                <span className="layer-row-count">{countFor(c.id)}</span>
+              </span>
+              <button
+                className={"toggle-switch" + (activeLayers.has(c.id) ? " toggle-switch--on" : "")}
+                onClick={() => onToggle(c.id)}
+                style={activeLayers.has(c.id) ? { background: c.color } : undefined}
+                aria-label={`Toggle ${c.label} pins`}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ReportModal({ pendingLocation, onCancel, onSubmit, onRequestPin }) {
   const [category, setCategory] = useState("traffic");
   const [description, setDescription] = useState("");
@@ -483,6 +515,9 @@ export default function App() {
   const [view, setView] = useState("map");
   const [contacts, setContacts] = useState(null);
   const [contactsLoading, setContactsLoading] = useState(false);
+  const [officeLayers, setOfficeLayers] = useState(new Set());
+  const [layerPanelOpen, setLayerPanelOpen] = useState(false);
+  const contactMarkersRef = useRef({});
   const lastSeenRef = useRef(Date.now());
 
   useEffect(() => {
@@ -493,7 +528,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (view !== "directory" || contacts !== null) return;
     setContactsLoading(true);
     supabase
       .from("contacts")
@@ -508,7 +542,7 @@ export default function App() {
         }
         setContacts(data);
       });
-  }, [view, contacts]);
+  }, []);
 
   const loadIncidents = useCallback(async (isPoll) => {
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -620,6 +654,41 @@ export default function App() {
       markersRef.current.__pending = L.marker([pendingLocation.lat, pendingLocation.lng], { icon }).addTo(map);
     }
   }, [pendingLocation]);
+
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map || !window.L || !contacts) return;
+    const L = window.L;
+    Object.values(contactMarkersRef.current).forEach((m) => map.removeLayer(m));
+    contactMarkersRef.current = {};
+    contacts
+      .filter((c) => c.lat != null && c.lng != null && officeLayers.has(c.category))
+      .forEach((c) => {
+        const cat = contactCatInfo(c.category);
+        const icon = L.divIcon({
+          html: `<div style="font-size:20px; transform: translate(-50%, -100%);">${cat.emoji}</div>`,
+          className: "",
+          iconSize: [0, 0],
+        });
+        const marker = L.marker([c.lat, c.lng], { icon }).addTo(map);
+        marker.bindPopup(
+          `<strong>${c.name}</strong><br/>${c.address || ""}<br/>${c.phone
+            .split(",")
+            .map((p) => `<a href="tel:${p.trim()}">${p.trim()}</a>`)
+            .join(" · ")}`
+        );
+        contactMarkersRef.current[c.id] = marker;
+      });
+  }, [contacts, officeLayers]);
+
+  const toggleOfficeLayer = (catId) => {
+    setOfficeLayers((prev) => {
+      const next = new Set(prev);
+      if (next.has(catId)) next.delete(catId);
+      else next.add(catId);
+      return next;
+    });
+  };
 
   const toggleCat = (id) => {
     setActiveCats((prev) => {
@@ -796,6 +865,15 @@ export default function App() {
         .contact-phones { display: flex; gap: 8px; flex-wrap: wrap; }
         .contact-phone-btn { display: inline-flex; align-items: center; gap: 5px; background: #14161B; border: 1px solid #3A3E4A; border-radius: 6px; padding: 6px 10px; font-size: 12.5px; font-weight: 600; color: #4A9A5A; text-decoration: none; font-family: 'IBM Plex Mono', monospace; }
         .contact-phone-btn:hover { border-color: #4A9A5A; }
+        .layer-panel { position: absolute; bottom: 16px; left: 16px; z-index: 500; }
+        .layer-panel-toggle { display: inline-flex; align-items: center; gap: 6px; background: #1E212A; border: 1px solid #3A3E4A; border-radius: 8px; padding: 8px 12px; color: #EDEBE4; font-size: 12.5px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+        .layer-panel-body { margin-top: 8px; background: #1E212A; border: 1px solid #3A3E4A; border-radius: 8px; padding: 10px; min-width: 220px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+        .layer-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 4px; }
+        .layer-row-label { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #C8C6C0; }
+        .layer-row-count { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6B6F7A; background: #14161B; border-radius: 999px; padding: 1px 6px; margin-left: 2px; }
+        .toggle-switch { width: 34px; height: 20px; border-radius: 999px; background: #3A3E4A; border: none; position: relative; cursor: pointer; flex-shrink: 0; transition: background 0.15s ease; }
+        .toggle-knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #EDEBE4; transition: transform 0.15s ease; display: block; }
+        .toggle-switch--on .toggle-knob { transform: translateX(14px); }
         @media (max-width: 720px) {
           .body-layout { flex-direction: column; }
           .sidebar { width: 100%; height: 40%; border-left: none; border-top: 1px solid #2A2E38; }
@@ -834,6 +912,15 @@ export default function App() {
                   Cancel
                 </button>
               </div>
+            )}
+            {!pinMode && (
+              <OfficeLayerToggles
+                activeLayers={officeLayers}
+                onToggle={toggleOfficeLayer}
+                isOpen={layerPanelOpen}
+                onOpenChange={setLayerPanelOpen}
+                contactsWithLocation={(contacts || []).filter((c) => c.lat != null && c.lng != null)}
+              />
             )}
             {error && <div className="error-toast">{error}</div>}
           </div>
