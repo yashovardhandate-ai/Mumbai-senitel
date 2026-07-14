@@ -672,6 +672,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (view === "map" && mapInstance.current) {
+      setTimeout(() => mapInstance.current.invalidateSize(), 50);
+    }
+  }, [view]);
+
+  useEffect(() => {
     pinModeRef.current = pinMode;
     if (mapRef.current) mapRef.current.style.cursor = pinMode ? "crosshair" : "";
   }, [pinMode]);
@@ -975,7 +981,7 @@ export default function App() {
       )}
       {view === "map" && <CategoryFilterBar active={activeCats} onToggle={toggleCat} />}
 
-      {view === "home" ? (
+      {view === "home" && (
         <div className="view-fade">
           <HomeScreen
             onReport={() => {
@@ -986,57 +992,59 @@ export default function App() {
             onGoToDirectory={() => setView("directory")}
           />
         </div>
-      ) : view === "map" ? (
-        <div className="body-layout view-fade" key="map-view">
-          <div className="map-container">
-            <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
-            {incidents === null && (
-              <div className="loading-overlay">
-                <Loader2 size={16} className="spin" /> Loading map…
-              </div>
-            )}
-            {pinMode && (
-              <div className="pin-banner">
-                Tap anywhere on the map to drop your pin
-                <button
-                  className="pin-banner-cancel"
-                  onClick={() => {
-                    setPinMode(false);
-                    setModalOpen(true);
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
-            {!pinMode && (
-              <OfficeLayerToggles
-                activeLayers={officeLayers}
-                onToggle={toggleOfficeLayer}
-                isOpen={layerPanelOpen}
-                onOpenChange={setLayerPanelOpen}
-                contactsWithLocation={(contacts || []).filter((c) => c.lat != null && c.lng != null)}
-              />
-            )}
-            {error && <div className="error-toast">{error}</div>}
-          </div>
-          <div className="sidebar">
-            <div className="sidebar-header">
-              {visibleIncidents.length} active incident{visibleIncidents.length === 1 ? "" : "s"}
+      )}
+
+      <div className="body-layout" style={{ display: view === "map" ? "flex" : "none" }}>
+        <div className="map-container">
+          <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
+          {incidents === null && (
+            <div className="loading-overlay">
+              <Loader2 size={16} className="spin" /> Loading map…
             </div>
-            <IncidentList
-              incidents={visibleIncidents}
-              onSelect={(inc) => setSelectedId(inc.id)}
-              onVote={handleVote}
-              onResolve={handleResolve}
-              selectedId={selectedIncident?.id}
-              myVotes={myVotes}
-              ownedIds={ownedIds}
+          )}
+          {pinMode && (
+            <div className="pin-banner">
+              Tap anywhere on the map to drop your pin
+              <button
+                className="pin-banner-cancel"
+                onClick={() => {
+                  setPinMode(false);
+                  setModalOpen(true);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {!pinMode && (
+            <OfficeLayerToggles
+              activeLayers={officeLayers}
+              onToggle={toggleOfficeLayer}
+              isOpen={layerPanelOpen}
+              onOpenChange={setLayerPanelOpen}
+              contactsWithLocation={(contacts || []).filter((c) => c.lat != null && c.lng != null)}
             />
-          </div>
+          )}
+          {error && <div className="error-toast">{error}</div>}
         </div>
-      ) : (
-        <div className="directory-body view-fade" key="directory-view">
+        <div className="sidebar">
+          <div className="sidebar-header">
+            {visibleIncidents.length} active incident{visibleIncidents.length === 1 ? "" : "s"}
+          </div>
+          <IncidentList
+            incidents={visibleIncidents}
+            onSelect={(inc) => setSelectedId(inc.id)}
+            onVote={handleVote}
+            onResolve={handleResolve}
+            selectedId={selectedIncident?.id}
+            myVotes={myVotes}
+            ownedIds={ownedIds}
+          />
+        </div>
+      </div>
+
+      {view === "directory" && (
+        <div className="directory-body view-fade">
           {error && <div className="error-toast" style={{ position: "static", margin: "12px auto", display: "block", width: "fit-content" }}>{error}</div>}
           <Directory contacts={contacts} loading={contactsLoading} />
         </div>
