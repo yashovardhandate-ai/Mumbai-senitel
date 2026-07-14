@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { AlertTriangle, X, ThumbsUp, ThumbsDown, Loader2, MapPin, Bell, CheckCircle2, Phone, Search, Map as MapIcon, BookOpen } from "lucide-react";
+import { AlertTriangle, X, ThumbsUp, ThumbsDown, Loader2, MapPin, Bell, CheckCircle2, Phone, Search, Map as MapIcon, BookOpen, Camera, Locate, Share2 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 
 const LEAFLET_CSS_ID = "leaflet-css";
@@ -226,6 +226,7 @@ function IncidentList({ incidents, onSelect, onVote, onResolve, selectedId, myVo
               <span className="incident-time">{timeAgo(inc.created_at)}</span>
             </div>
             <p className="incident-desc">{inc.description}</p>
+            {inc.photo_url && <img src={inc.photo_url} alt="" className="incident-photo" />}
             <div className="incident-card-foot">
               <button
                 className={"vote-btn" + (myVote === "up" ? " vote-btn--active-up" : "")}
@@ -448,8 +449,31 @@ function ReportModal({ pendingLocation, onCancel, onSubmit, onRequestPin }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [saving, setSaving] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState(null);
+  const fileInputRef = useRef(null);
 
   const canSubmit = pendingLocation && description.trim() && name.trim() && phone.trim().length >= 7;
+
+  const handlePhotoSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoError(null);
+    setUploadingPhoto(true);
+    try {
+      const ext = (file.type.split("/")[1] || "jpg").replace("jpeg", "jpg");
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("incident-photos").upload(path, file);
+      if (upErr) throw upErr;
+      const { data } = supabase.storage.from("incident-photos").getPublicUrl(path);
+      setPhotoUrl(data.publicUrl);
+    } catch (err) {
+      setPhotoError("Couldn't upload photo: " + err.message);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -461,6 +485,7 @@ function ReportModal({ pendingLocation, onCancel, onSubmit, onRequestPin }) {
       reporter_phone: phone.trim(),
       lat: pendingLocation.lat,
       lng: pendingLocation.lng,
+      photo_url: photoUrl,
     });
     setSaving(false);
   };
@@ -513,6 +538,35 @@ function ReportModal({ pendingLocation, onCancel, onSubmit, onRequestPin }) {
           onChange={(e) => setDescription(e.target.value)}
           rows={3}
         />
+
+        <label className="field-label">Photo (optional)</label>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          style={{ display: "none" }}
+          onChange={handlePhotoSelect}
+        />
+        {photoUrl ? (
+          <div className="photo-preview">
+            <img src={photoUrl} alt="incident" />
+            <button className="photo-remove" onClick={() => setPhotoUrl(null)} type="button">
+              <X size={14} /> Remove
+            </button>
+          </div>
+        ) : (
+          <button
+            className="photo-upload-btn"
+            onClick={() => fileInputRef.current?.click()}
+            type="button"
+            disabled={uploadingPhoto}
+          >
+            {uploadingPhoto ? <Loader2 size={15} className="spin" /> : <Camera size={15} strokeWidth={2.2} />}
+            {uploadingPhoto ? "Uploading…" : "Add a photo"}
+          </button>
+        )}
+        {photoError && <p className="photo-error">{photoError}</p>}
 
         <div className="field-row">
           <div style={{ flex: 1 }}>
@@ -756,6 +810,38 @@ export default function App() {
     });
   };
 
+  const [locating, setLocating] = useState(false);
+  const userMarkerRef = useRef(null);
+
+  const handleLocateMe = () => {
+    if (!navigator.geolocation || !mapInstance.current) {
+      setError("Location isn't available on this device.");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false);
+        const { latitude, longitude } = pos.coords;
+        const map = mapInstance.current;
+        const L = window.L;
+        map.setView([latitude, longitude], 15);
+        if (userMarkerRef.current) map.removeLayer(userMarkerRef.current);
+        const icon = L.divIcon({
+          html: `<div style="font-size:22px; transform: translate(-50%, -50%);">📍</div>`,
+          className: "",
+          iconSize: [0, 0],
+        });
+        userMarkerRef.current = L.marker([latitude, longitude], { icon }).addTo(map);
+      },
+      () => {
+        setLocating(false);
+        setError("Couldn't get your location. Check location permissions.");
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
   const toggleCat = (id) => {
     setActiveCats((prev) => {
       const next = new Set(prev);
@@ -871,6 +957,13 @@ export default function App() {
         .incident-cat { font-size: 11.5px; font-weight: 600; }
         .incident-time { margin-left: auto; font-size: 10.5px; color: #6B6F7A; font-family: 'IBM Plex Mono', monospace; }
         .incident-desc { font-size: 13.5px; line-height: 1.5; color: #C8C6C0; margin: 0 0 8px; }
+        .incident-photo { width: 100%; height: auto; max-height: 160px; object-fit: cover; border-radius: 6px; margin-bottom: 8px; display: block; }
+        .photo-upload-btn { display: inline-flex; align-items: center; gap: 6px; background: #14161B; border: 1px dashed #4A4E5A; border-radius: 6px; padding: 10px 14px; color: #8A8E9A; cursor: pointer; font-size: 13px; width: 100%; justify-content: center; }
+        .photo-upload-btn:hover { border-color: #6B6F7A; color: #EDEBE4; }
+        .photo-preview { position: relative; }
+        .photo-preview img { width: 100%; height: auto; max-height: 200px; object-fit: cover; border-radius: 6px; display: block; }
+        .photo-remove { position: absolute; top: 8px; right: 8px; display: inline-flex; align-items: center; gap: 4px; background: rgba(20,22,27,0.85); border: none; border-radius: 5px; padding: 5px 9px; color: #fff; font-size: 11.5px; cursor: pointer; }
+        .photo-error { font-size: 11.5px; color: #C13B3B; margin: 6px 0 0; }
         .incident-card-foot { display: flex; align-items: center; gap: 6px; }
         .vote-btn { background: none; border: 1px solid #3A3E4A; border-radius: 5px; padding: 3px 6px; color: #8A8E9A; cursor: pointer; display: flex; align-items: center; }
         .vote-btn:hover { border-color: #6B6F7A; color: #EDEBE4; }
@@ -910,6 +1003,9 @@ export default function App() {
         .spin { animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .error-toast { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: #C13B3B; color: #fff; padding: 8px 14px; border-radius: 6px; font-size: 12.5px; z-index: 500; max-width: 80%; text-align: center; }
+        .locate-btn { position: absolute; bottom: 16px; right: 16px; z-index: 500; width: 44px; height: 44px; border-radius: 50%; background: #1E212A; border: 1px solid #3A3E4A; color: #EDEBE4; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+        .locate-btn:hover { border-color: #6B6F7A; }
+        .locate-btn:disabled { opacity: 0.6; }
         .pin-banner { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: #C9862B; color: #14161B; padding: 8px 10px 8px 16px; border-radius: 999px; font-size: 12.5px; font-weight: 600; z-index: 500; box-shadow: 0 2px 8px rgba(0,0,0,0.3); display: flex; align-items: center; gap: 10px; }
         .pin-banner-cancel { background: rgba(20,22,27,0.15); border: none; border-radius: 999px; padding: 4px 10px; font-size: 11.5px; font-weight: 600; color: #14161B; cursor: pointer; }
         .loading-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #1A1D24; color: #8A8E9A; font-size: 13px; gap: 8px; }
@@ -1025,6 +1121,9 @@ export default function App() {
               contactsWithLocation={(contacts || []).filter((c) => c.lat != null && c.lng != null)}
             />
           )}
+          <button className="locate-btn" onClick={handleLocateMe} disabled={locating} aria-label="Find my location">
+            {locating ? <Loader2 size={18} className="spin" /> : <Locate size={18} strokeWidth={2.2} />}
+          </button>
           {error && <div className="error-toast">{error}</div>}
         </div>
         <div className="sidebar">
