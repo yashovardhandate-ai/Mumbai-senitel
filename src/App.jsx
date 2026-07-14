@@ -404,6 +404,7 @@ function HomeScreen({ onReport, onGoToMap, onGoToDirectory }) {
       }).setView(MUMBAI_CENTER, 12);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
       bgMapInstance.current = map;
+      setTimeout(() => map.invalidateSize(), 100);
     });
     return () => {
       cancelled = true;
@@ -934,7 +935,7 @@ export default function App() {
         .toggle-switch { width: 34px; height: 20px; border-radius: 999px; background: #3A3E4A; border: none; position: relative; cursor: pointer; flex-shrink: 0; transition: background 0.15s ease; }
         .toggle-knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #EDEBE4; transition: transform 0.15s ease; display: block; }
         .toggle-switch--on .toggle-knob { transform: translateX(14px); }
-        .view-fade { flex: 1; min-height: 0; animation: fadeIn 0.45s ease; }
+        .view-fade { flex: 1; min-height: 0; display: flex; flex-direction: column; animation: fadeIn 0.45s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         .home-screen { position: relative; flex: 1; min-height: 0; overflow: hidden; }
         .home-map-bg { position: absolute; inset: 0; filter: grayscale(0.3) brightness(0.55) saturate(0.8); transform: scale(1.08); }
