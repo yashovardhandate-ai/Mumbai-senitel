@@ -113,8 +113,10 @@ function Header({ view, onViewChange, onReportClick, alertCount, onClearAlerts }
   return (
     <div className="header-bar">
       <div className="header-left">
-        <AlertTriangle size={20} strokeWidth={2.2} color="#C13B3B" />
-        <span className="header-title">Mumbai Sentinel</span>
+        <button className="header-logo-btn" onClick={() => onViewChange("home")}>
+          <AlertTriangle size={20} strokeWidth={2.2} color="#C13B3B" />
+          <span className="header-title">Mumbai Sentinel</span>
+        </button>
         <div className="view-toggle">
           <button
             className={"view-toggle-btn" + (view === "map" ? " view-toggle-btn--active" : "")}
@@ -382,6 +384,63 @@ function OfficeLayerToggles({ activeLayers, onToggle, isOpen, onOpenChange, cont
   );
 }
 
+function HomeScreen({ onReport, onGoToMap, onGoToDirectory }) {
+  const bgMapRef = useRef(null);
+  const bgMapInstance = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    ensureLeaflet().then((L) => {
+      if (cancelled || bgMapInstance.current || !bgMapRef.current) return;
+      const map = L.map(bgMapRef.current, {
+        zoomControl: false,
+        dragging: false,
+        touchZoom: false,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
+        boxZoom: false,
+        keyboard: false,
+        attributionControl: false,
+      }).setView(MUMBAI_CENTER, 12);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+      bgMapInstance.current = map;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <div className="home-screen">
+      <div ref={bgMapRef} className="home-map-bg" />
+      <div className="home-overlay" />
+      <div className="home-content">
+        <div className="home-title-box">
+          <AlertTriangle size={30} strokeWidth={2.2} color="#C13B3B" />
+          <h1 className="home-title">Mumbai Sentinel</h1>
+        </div>
+        <div className="home-tagline-box">
+          <p className="home-tagline">Report incidents anytime, anywhere — Mumbai's own incident reporting network.</p>
+        </div>
+        <div className="home-actions">
+          <button className="home-btn home-btn--primary" onClick={onReport}>
+            <AlertTriangle size={16} strokeWidth={2.2} />
+            Report Incident
+          </button>
+          <button className="home-btn home-btn--secondary" onClick={onGoToMap}>
+            <MapIcon size={16} strokeWidth={2.2} />
+            Go to Map
+          </button>
+          <button className="home-btn home-btn--secondary" onClick={onGoToDirectory}>
+            <BookOpen size={16} strokeWidth={2.2} />
+            Go to Directory
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ReportModal({ pendingLocation, onCancel, onSubmit, onRequestPin }) {
   const [category, setCategory] = useState("traffic");
   const [description, setDescription] = useState("");
@@ -512,7 +571,7 @@ export default function App() {
   const [namePromptOpen, setNamePromptOpen] = useState(false);
   const [pendingVote, setPendingVote] = useState(null);
   const [ownedIds, setOwnedIds] = useState(new Set());
-  const [view, setView] = useState("map");
+  const [view, setView] = useState("home");
   const [contacts, setContacts] = useState(null);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [officeLayers, setOfficeLayers] = useState(new Set());
@@ -783,6 +842,7 @@ export default function App() {
         .app-root { height: 100vh; display: flex; flex-direction: column; background: #1A1D24; color: #EDEBE4; font-family: 'Inter', sans-serif; overflow: hidden; }
         .header-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #14161B; border-bottom: 1px solid #2A2E38; flex-shrink: 0; }
         .header-left { display: flex; align-items: center; gap: 8px; }
+        .header-logo-btn { display: inline-flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer; padding: 2px; }
         .header-title { font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
         .header-right { display: flex; align-items: center; gap: 10px; }
         .alert-badge { display: inline-flex; align-items: center; gap: 5px; background: #C13B3B; color: #fff; font-size: 11.5px; font-weight: 600; padding: 4px 9px; border-radius: 999px; font-family: 'IBM Plex Mono', monospace; border: none; cursor: pointer; }
@@ -874,6 +934,28 @@ export default function App() {
         .toggle-switch { width: 34px; height: 20px; border-radius: 999px; background: #3A3E4A; border: none; position: relative; cursor: pointer; flex-shrink: 0; transition: background 0.15s ease; }
         .toggle-knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #EDEBE4; transition: transform 0.15s ease; display: block; }
         .toggle-switch--on .toggle-knob { transform: translateX(14px); }
+        .view-fade { flex: 1; min-height: 0; animation: fadeIn 0.45s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        .home-screen { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+        .home-map-bg { position: absolute; inset: 0; filter: grayscale(0.3) brightness(0.55) saturate(0.8); transform: scale(1.08); }
+        .home-overlay { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(20,22,27,0.55) 0%, rgba(14,16,20,0.88) 100%); }
+        .home-content { position: relative; z-index: 2; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; }
+        .home-title-box { display: inline-flex; align-items: center; gap: 12px; background: #1C2541; border: 1px solid #2E3A66; border-radius: 14px; padding: 18px 32px; box-shadow: 0 8px 32px rgba(0,0,0,0.45); animation: riseIn 0.6s ease; }
+        .home-title { font-family: 'Inter', sans-serif; font-weight: 800; font-size: clamp(1.9rem, 6vw, 3.2rem); letter-spacing: -0.02em; margin: 0; color: #EDEBE4; }
+        .home-tagline-box { background: #1C2541; border: 1px solid #2E3A66; border-radius: 10px; padding: 12px 22px; max-width: 520px; box-shadow: 0 6px 24px rgba(0,0,0,0.4); animation: riseIn 0.6s ease 0.1s both; }
+        .home-tagline { margin: 0; font-size: 15px; color: #C8CCE0; line-height: 1.5; }
+        .home-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 6px; animation: riseIn 0.6s ease 0.2s both; }
+        @keyframes riseIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+        .home-btn { display: inline-flex; align-items: center; gap: 8px; border-radius: 8px; padding: 12px 22px; font-size: 14px; font-weight: 700; cursor: pointer; transition: transform 0.15s ease, background 0.15s ease; }
+        .home-btn:hover { transform: translateY(-2px); }
+        .home-btn--primary { background: #C13B3B; border: 1px solid #C13B3B; color: #fff; }
+        .home-btn--primary:hover { background: #a83030; }
+        .home-btn--secondary { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.25); color: #EDEBE4; backdrop-filter: blur(4px); }
+        .home-btn--secondary:hover { background: rgba(255,255,255,0.12); }
+        @media (max-width: 480px) {
+          .home-title-box { flex-direction: column; gap: 8px; padding: 16px 24px; }
+          .home-actions { flex-direction: column; width: 100%; max-width: 280px; }
+        }
         @media (max-width: 720px) {
           .body-layout { flex-direction: column; }
           .sidebar { width: 100%; height: 40%; border-left: none; border-top: 1px solid #2A2E38; }
@@ -881,17 +963,30 @@ export default function App() {
         }
       `}</style>
 
-      <Header
-        view={view}
-        onViewChange={setView}
-        onReportClick={handleReportClick}
-        alertCount={newAlertCount}
-        onClearAlerts={() => setNewAlertCount(0)}
-      />
+      {view !== "home" && (
+        <Header
+          view={view}
+          onViewChange={setView}
+          onReportClick={handleReportClick}
+          alertCount={newAlertCount}
+          onClearAlerts={() => setNewAlertCount(0)}
+        />
+      )}
       {view === "map" && <CategoryFilterBar active={activeCats} onToggle={toggleCat} />}
 
-      {view === "map" ? (
-        <div className="body-layout">
+      {view === "home" ? (
+        <div className="view-fade">
+          <HomeScreen
+            onReport={() => {
+              setView("map");
+              handleReportClick();
+            }}
+            onGoToMap={() => setView("map")}
+            onGoToDirectory={() => setView("directory")}
+          />
+        </div>
+      ) : view === "map" ? (
+        <div className="body-layout view-fade" key="map-view">
           <div className="map-container">
             <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
             {incidents === null && (
@@ -940,7 +1035,7 @@ export default function App() {
           </div>
         </div>
       ) : (
-        <div className="directory-body">
+        <div className="directory-body view-fade" key="directory-view">
           {error && <div className="error-toast" style={{ position: "static", margin: "12px auto", display: "block", width: "fit-content" }}>{error}</div>}
           <Directory contacts={contacts} loading={contactsLoading} />
         </div>
