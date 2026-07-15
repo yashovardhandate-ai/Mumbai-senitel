@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { AlertTriangle, X, ThumbsUp, ThumbsDown, Loader2, MapPin, Bell, CheckCircle2, Phone, Search, Map as MapIcon, BookOpen, Camera, Locate, Share2 } from "lucide-react";
+import { AlertTriangle, X, ThumbsUp, ThumbsDown, Loader2, MapPin, Bell, BellOff, CheckCircle2, Phone, Search, Map as MapIcon, BookOpen, Camera, Locate, Share2 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 
 const LEAFLET_CSS_ID = "leaflet-css";
@@ -7,6 +7,41 @@ const LEAFLET_JS_ID = "leaflet-js";
 const FONT_LINK_ID = "sentinel-fonts";
 const VOTER_NAME_KEY = "sentinel_voter_name";
 const OWNED_REPORTS_KEY = "sentinel_owned_reports";
+
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || "";
+
+// Push subscription keys arrive as base64url strings but the browser wants
+// raw bytes.
+function urlB64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+function bufToB64(buf) {
+  return btoa(String.fromCharCode.apply(null, new Uint8Array(buf)));
+}
+
+function pushSupported() {
+  return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+}
+
+// Ask the browser for the user's location once, so we only alert them about
+// incidents near them. Resolves to null if they decline -- that's fine, they
+// just get every alert instead.
+function getPositionOrNull() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve(null),
+      { timeout: 8000 }
+    );
+  });
+}
 
 function getOwnedReports() {
   try {
@@ -109,7 +144,7 @@ function expiresIn(iso) {
   return `expires in ${hrs}h`;
 }
 
-function Header({ view, onViewChange, onReportClick, alertCount, onClearAlerts }) {
+function Header({ view, onViewChange, onReportClick, alertCount, onClearAlerts, pushState, onTogglePush }) {
   return (
     <div className="header-bar">
       <div className="header-left">
@@ -137,6 +172,23 @@ function Header({ view, onViewChange, onReportClick, alertCount, onClearAlerts }
           <button className="alert-badge" onClick={onClearAlerts}>
             <Bell size={13} strokeWidth={2.2} />
             {alertCount} new
+          </button>
+        )}
+        {pushSupported() && (
+          <button
+            className={"notify-btn" + (pushState === "on" ? " notify-btn--on" : "")}
+            onClick={onTogglePush}
+            disabled={pushState === "busy"}
+            title={pushState === "on" ? "Alerts on — tap to turn off" : "Get alerts for incidents near you"}
+          >
+            {pushState === "busy" ? (
+              <Loader2 size={15} className="spin" />
+            ) : pushState === "on" ? (
+              <Bell size={15} strokeWidth={2.2} />
+            ) : (
+              <BellOff size={15} strokeWidth={2.2} />
+            )}
+            <span className="notify-btn-label">{pushState === "on" ? "Alerts on" : "Get alerts"}</span>
           </button>
         )}
         <button className="report-btn" onClick={onReportClick}>
@@ -810,6 +862,73 @@ export default function App() {
     });
   };
 
+  const [pushState, setPushState] = useState("off");
+
+  // On load, check whether this browser is already subscribed.
+  useEffect(() => {
+    if (!pushSupported()) return;
+    navigator.serviceWorker.ready
+      .then((reg) => reg.pushManager.getSubscription())
+      .then((sub) => setPushState(sub ? "on" : "off"))
+      .catch(() => {});
+  }, []);
+
+  const handleTogglePush = async () => {
+    if (!pushSupported()) return;
+    setPushState("busy");
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+
+      // Already subscribed -> turn alerts off.
+      if (existing) {
+        await supabase.from("push_subscriptions").delete().eq("endpoint", existing.endpoint);
+        await existing.unsubscribe();
+        setPushState("off");
+        return;
+      }
+
+      if (!VAPID_PUBLIC_KEY) {
+        setError("Alerts aren't configured yet (missing VAPID key).");
+        setPushState("off");
+        return;
+      }
+
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setError("Alerts need notification permission. You can enable it in browser settings.");
+        setPushState("off");
+        return;
+      }
+
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+
+      const pos = await getPositionOrNull();
+      const json = sub.toJSON();
+
+      const { error: err } = await supabase.from("push_subscriptions").upsert(
+        {
+          endpoint: sub.endpoint,
+          p256dh: json.keys?.p256dh ?? bufToB64(sub.getKey("p256dh")),
+          auth: json.keys?.auth ?? bufToB64(sub.getKey("auth")),
+          lat: pos?.lat ?? null,
+          lng: pos?.lng ?? null,
+          radius_km: 5,
+        },
+        { onConflict: "endpoint" }
+      );
+      if (err) throw err;
+
+      setPushState("on");
+    } catch (e) {
+      setError("Couldn't set up alerts: " + (e?.message || e));
+      setPushState("off");
+    }
+  };
+
   const [locating, setLocating] = useState(false);
   const userMarkerRef = useRef(null);
 
@@ -874,6 +993,12 @@ export default function App() {
     setPendingLocation(null);
     lastSeenRef.current = Date.now();
     await loadIncidents(false);
+
+    // Notify nearby subscribers. Deliberately not awaited-on-failure: if the
+    // push service is down or not set up, the report itself still stands.
+    supabase.functions
+      .invoke("send-push", { body: { incident: { id, ...data } } })
+      .catch(() => {});
   };
 
   const handleResolve = async (incidentId) => {
@@ -939,6 +1064,11 @@ export default function App() {
         .header-title { font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
         .header-right { display: flex; align-items: center; gap: 10px; }
         .alert-badge { display: inline-flex; align-items: center; gap: 5px; background: #C13B3B; color: #fff; font-size: 11.5px; font-weight: 600; padding: 4px 9px; border-radius: 999px; font-family: 'IBM Plex Mono', monospace; border: none; cursor: pointer; }
+        .notify-btn { display: inline-flex; align-items: center; gap: 6px; background: transparent; color: #8A8E9A; border: 1px solid #3A3E4A; border-radius: 6px; padding: 7px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+        .notify-btn:hover { border-color: #6B6F7A; color: #EDEBE4; }
+        .notify-btn--on { border-color: #4A9A5A; color: #4A9A5A; }
+        .notify-btn:disabled { opacity: 0.6; cursor: default; }
+        @media (max-width: 600px) { .notify-btn-label { display: none; } }
         .report-btn { display: inline-flex; align-items: center; gap: 6px; background: #C13B3B; color: #fff; border: none; border-radius: 6px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
         .report-btn:hover { background: #a83030; }
         .cat-filter-bar { display: flex; gap: 6px; padding: 10px 16px; background: #14161B; border-bottom: 1px solid #2A2E38; overflow-x: auto; flex-shrink: 0; }
@@ -1073,6 +1203,8 @@ export default function App() {
           onReportClick={handleReportClick}
           alertCount={newAlertCount}
           onClearAlerts={() => setNewAlertCount(0)}
+          pushState={pushState}
+          onTogglePush={handleTogglePush}
         />
       )}
       {view === "map" && <CategoryFilterBar active={activeCats} onToggle={toggleCat} />}
