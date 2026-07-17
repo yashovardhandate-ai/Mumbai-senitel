@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { AlertTriangle, X, ThumbsUp, ThumbsDown, Loader2, MapPin, Bell, BellOff, CheckCircle2, Phone, Search, Map as MapIcon, BookOpen, Camera, Locate, Share2 } from "lucide-react";
+import { AlertTriangle, X, ThumbsUp, ThumbsDown, Loader2, MapPin, Bell, BellOff, CheckCircle2, Phone, Search, Map as MapIcon, BookOpen, Camera, Locate, Share2, Flag } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 
 const LEAFLET_CSS_ID = "leaflet-css";
@@ -323,9 +323,96 @@ function IncidentList({ incidents, onSelect, onVote, onResolve, selectedId, myVo
   );
 }
 
+const REPORT_REASONS = [
+  { id: "number_dead", label: "Number doesn't connect" },
+  { id: "number_wrong", label: "Wrong number / someone else" },
+  { id: "address_wrong", label: "Address is wrong" },
+  { id: "moved_closed", label: "Office moved or closed" },
+  { id: "other", label: "Something else" },
+];
+
+function ReportContactModal({ contact, onCancel, onDone }) {
+  const [reason, setReason] = useState(null);
+  const [details, setDetails] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const submit = async () => {
+    if (!reason) return;
+    setSaving(true);
+    setErr(null);
+    try {
+      const { error } = await supabase.from("contact_reports").insert([
+        {
+          contact_id: contact.id,
+          contact_name: contact.name,
+          reason,
+          details: details.trim() || null,
+        },
+      ]);
+      if (error) throw error;
+      onDone();
+    } catch (e) {
+      setErr("Couldn't send: " + (e?.message || e));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal report-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Report incorrect details</h2>
+          <button className="icon-btn" onClick={onCancel} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+
+        <p className="report-target">{contact.name}</p>
+
+        <label className="field-label">What's wrong?</label>
+        <div className="reason-chips">
+          {REPORT_REASONS.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              className={"reason-chip" + (reason === r.id ? " reason-chip--active" : "")}
+              onClick={() => setReason(r.id)}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+
+        <label className="field-label" htmlFor="rc-details">Details (optional)</label>
+        <textarea
+          id="rc-details"
+          className="field-textarea"
+          rows={2}
+          placeholder="e.g. the correct number is..."
+          value={details}
+          onChange={(e) => setDetails(e.target.value)}
+        />
+
+        {err && <p className="photo-error">{err}</p>}
+
+        <div className="modal-actions">
+          <button className="btn-secondary" onClick={onCancel} type="button">Cancel</button>
+          <button className="btn-primary" onClick={submit} disabled={!reason || saving} type="button">
+            {saving ? <Loader2 size={14} className="spin" /> : null}
+            {saving ? "Sending…" : "Send report"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Directory({ contacts, loading }) {
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("all");
+  const [reporting, setReporting] = useState(null);
+  const [thanksFor, setThanksFor] = useState(null);
 
   const filtered = (contacts || []).filter((c) => {
     const matchesCat = activeCat === "all" || c.category === activeCat;
@@ -396,11 +483,33 @@ function Directory({ contacts, loading }) {
                     </a>
                   ))}
                 </div>
+                <div className="contact-card-foot">
+                  {thanksFor === c.id ? (
+                    <span className="report-thanks">
+                      <CheckCircle2 size={12} strokeWidth={2.2} /> Thanks — we'll check this
+                    </span>
+                  ) : (
+                    <button className="report-link" onClick={() => setReporting(c)} type="button">
+                      <Flag size={11} strokeWidth={2.2} /> Report incorrect
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })
         )}
       </div>
+
+      {reporting && (
+        <ReportContactModal
+          contact={reporting}
+          onCancel={() => setReporting(null)}
+          onDone={() => {
+            setThanksFor(reporting.id);
+            setReporting(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1094,6 +1203,16 @@ export default function App() {
         .photo-preview img { width: 100%; height: auto; max-height: 200px; object-fit: cover; border-radius: 6px; display: block; }
         .photo-remove { position: absolute; top: 8px; right: 8px; display: inline-flex; align-items: center; gap: 4px; background: rgba(20,22,27,0.85); border: none; border-radius: 5px; padding: 5px 9px; color: #fff; font-size: 11.5px; cursor: pointer; }
         .photo-error { font-size: 11.5px; color: #C13B3B; margin: 6px 0 0; }
+        .contact-card-foot { margin-top: 10px; padding-top: 8px; border-top: 1px solid #2A2E38; display: flex; justify-content: flex-end; }
+        .report-link { display: inline-flex; align-items: center; gap: 5px; background: none; border: none; color: #C13B3B; font-size: 11.5px; font-weight: 600; cursor: pointer; padding: 2px 4px; }
+        .report-link:hover { color: #E05252; text-decoration: underline; }
+        .report-thanks { display: inline-flex; align-items: center; gap: 5px; color: #4A9A5A; font-size: 11.5px; }
+        .report-modal { max-width: 420px; }
+        .report-target { font-size: 14px; font-weight: 600; color: #EDEBE4; margin: 0 0 14px; }
+        .reason-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 6px; }
+        .reason-chip { background: #14161B; border: 1px solid #3A3E4A; border-radius: 14px; padding: 6px 12px; font-size: 12px; color: #8A8E9A; cursor: pointer; }
+        .reason-chip:hover { border-color: #6B6F7A; color: #EDEBE4; }
+        .reason-chip--active { border-color: #C13B3B; color: #C13B3B; background: rgba(193,59,59,0.08); }
         .incident-card-foot { display: flex; align-items: center; gap: 6px; }
         .vote-btn { background: none; border: 1px solid #3A3E4A; border-radius: 5px; padding: 3px 6px; color: #8A8E9A; cursor: pointer; display: flex; align-items: center; }
         .vote-btn:hover { border-color: #6B6F7A; color: #EDEBE4; }
