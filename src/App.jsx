@@ -1116,7 +1116,7 @@ export default function App() {
     const ownerToken = genToken();
     const { error: err } = await supabase
       .from("incidents")
-      .insert([{ id, ...data, resolved: false, owner_token: ownerToken }]);
+      .insert([{ id, ...data, resolved: false, owner_token: ownerToken, last_confirmed_at: new Date().toISOString() }]);
     if (err) {
       setError("Couldn't submit: " + err.message);
       return;
