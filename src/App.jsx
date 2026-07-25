@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { AlertTriangle, X, ThumbsUp, ThumbsDown, Loader2, MapPin, Bell, BellOff, CheckCircle2, Phone, Search, Map as MapIcon, BookOpen, Camera, Locate, Share2, Flag } from "lucide-react";
+import { AlertTriangle, X, ThumbsUp, ThumbsDown, Loader2, MapPin, Bell, BellOff, CheckCircle2, Phone, Search, Map as MapIcon, BookOpen, Camera, Locate, Share2, Flag, Eye } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 
 const LEAFLET_CSS_ID = "leaflet-css";
@@ -249,7 +249,7 @@ function NamePrompt({ onConfirm, onCancel }) {
   );
 }
 
-function IncidentList({ incidents, onSelect, onVote, onResolve, selectedId, myVotes, ownedIds }) {
+function IncidentList({ incidents, onSelect, onVote, onResolve, onConfirm, selectedId, myVotes, ownedIds }) {
   if (incidents.length === 0) {
     return <div className="empty-list">No incidents reported in this view yet.</div>;
   }
@@ -301,6 +301,26 @@ function IncidentList({ incidents, onSelect, onVote, onResolve, selectedId, myVo
               </button>
               <span className="reporter-name">— {inc.reporter_name}</span>
             </div>
+            {!isOwned && (
+              <button
+                className={"confirm-btn" + (inc.confirmedByMe ? " confirm-btn--done" : "")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!inc.confirmedByMe) onConfirm(inc);
+                }}
+                disabled={inc.confirmedByMe}
+              >
+                <Eye size={13} strokeWidth={2.2} />
+                {inc.confirmedByMe ? "You confirmed this" : "I see this too"}
+                {inc.confirmCount > 0 && <span className="confirm-count">{inc.confirmCount}</span>}
+              </button>
+            )}
+            {isOwned && inc.confirmCount > 0 && (
+              <div className="confirm-readonly">
+                <Eye size={13} strokeWidth={2.2} />
+                {inc.confirmCount} {inc.confirmCount === 1 ? "person confirms" : "people confirm"} this
+              </div>
+            )}
             <div className="incident-card-bottom">
               <span className="expiry-label">{expiresIn(inc.created_at)}</span>
               {isOwned && (
@@ -786,6 +806,7 @@ export default function App() {
   const [voterName, setVoterName] = useState(null);
   const [namePromptOpen, setNamePromptOpen] = useState(false);
   const [pendingVote, setPendingVote] = useState(null);
+  const [pendingConfirm, setPendingConfirm] = useState(null);
   const [ownedIds, setOwnedIds] = useState(new Set());
   const [view, setView] = useState("home");
   const [contacts, setContacts] = useState(null);
@@ -823,9 +844,9 @@ export default function App() {
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { data, error: err } = await supabase
       .from("incidents")
-      .select("*, votes(voter_name, direction)")
+      .select("*, votes(voter_name, direction), confirmations(confirmer_name)")
       .eq("resolved", false)
-      .gte("created_at", cutoff)
+      .gte("last_confirmed_at", cutoff)
       .order("created_at", { ascending: false });
     if (err) {
       setError("Couldn't load incidents: " + err.message);
@@ -836,6 +857,10 @@ export default function App() {
       ...inc,
       upvotes: inc.votes.filter((v) => v.direction === "up").length,
       downvotes: inc.votes.filter((v) => v.direction === "down").length,
+      confirmCount: (inc.confirmations || []).length,
+      confirmedByMe: voterName
+        ? (inc.confirmations || []).some((c) => c.confirmer_name === voterName)
+        : false,
     }));
     setIncidents((prev) => {
       if (isPoll && prev) {
@@ -1149,6 +1174,31 @@ export default function App() {
     castVote(incidentId, direction, voterName);
   };
 
+  const castConfirm = async (incidentId, name) => {
+    const { error: err } = await supabase
+      .from("confirmations")
+      .upsert(
+        { incident_id: incidentId, confirmer_name: name },
+        { onConflict: "incident_id,confirmer_name" }
+      );
+    if (err) {
+      setError("Couldn't confirm: " + err.message);
+      return;
+    }
+    await loadIncidents(false);
+  };
+
+  const handleConfirm = (incident) => {
+    // The reporter can't confirm their own incident.
+    if (ownedIds.has(incident.id)) return;
+    if (!voterName) {
+      setPendingConfirm(incident.id);
+      setNamePromptOpen(true);
+      return;
+    }
+    castConfirm(incident.id, voterName);
+  };
+
   const handleNameConfirm = (name) => {
     localStorage.setItem(VOTER_NAME_KEY, name);
     setVoterName(name);
@@ -1156,6 +1206,10 @@ export default function App() {
     if (pendingVote) {
       castVote(pendingVote.incidentId, pendingVote.direction, name);
       setPendingVote(null);
+    }
+    if (pendingConfirm) {
+      castConfirm(pendingConfirm, name);
+      setPendingConfirm(null);
     }
   };
 
@@ -1219,6 +1273,11 @@ export default function App() {
         .vote-btn--active-up { border-color: #4A9A5A; color: #4A9A5A; }
         .vote-btn--active-down { border-color: #C13B3B; color: #C13B3B; }
         .vote-score { font-size: 12px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; min-width: 16px; text-align: center; }
+        .confirm-btn { display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 8px; padding: 7px 10px; background: rgba(46,110,142,0.12); border: 1px solid #2E6E8E; border-radius: 6px; color: #6BA8C4; font-size: 12px; font-weight: 600; cursor: pointer; }
+        .confirm-btn:hover { background: rgba(46,110,142,0.22); }
+        .confirm-btn--done { background: rgba(74,154,90,0.10); border-color: #4A9A5A; color: #4A9A5A; cursor: default; }
+        .confirm-count { margin-left: auto; background: rgba(255,255,255,0.12); border-radius: 999px; padding: 1px 8px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
+        .confirm-readonly { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding: 6px 10px; color: #6BA8C4; font-size: 11.5px; }
         .vote-score--neg { color: #C13B3B; }
         .reporter-name { margin-left: auto; font-size: 11px; color: #6B6F7A; }
         .incident-card-bottom { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid #2A2E38; }
@@ -1386,6 +1445,7 @@ export default function App() {
             onSelect={(inc) => setSelectedId(inc.id)}
             onVote={handleVote}
             onResolve={handleResolve}
+            onConfirm={handleConfirm}
             selectedId={selectedIncident?.id}
             myVotes={myVotes}
             ownedIds={ownedIds}
