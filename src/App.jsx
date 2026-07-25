@@ -1177,11 +1177,9 @@ export default function App() {
   const castConfirm = async (incidentId, name) => {
     const { error: err } = await supabase
       .from("confirmations")
-      .upsert(
-        { incident_id: incidentId, confirmer_name: name },
-        { onConflict: "incident_id,confirmer_name" }
-      );
-    if (err) {
+      .insert({ incident_id: incidentId, confirmer_name: name });
+    // 23505 = already confirmed by this person; harmless, not worth surfacing.
+    if (err && err.code !== "23505") {
       setError("Couldn't confirm: " + err.message);
       return;
     }
