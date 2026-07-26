@@ -114,10 +114,21 @@ const CATEGORIES = [
   { id: "blockage", label: "Blockage", tkey: "cat.blockage", emoji: "🚧", color: "#B8562F" },
   { id: "fire", label: "Fire", tkey: "cat.fire", emoji: "🔥", color: "#C13B3B" },
   { id: "flood", label: "Flood / Disaster", tkey: "cat.flood", emoji: "🌊", color: "#2E6E8E" },
+  { id: "monsoon", label: "Monsoon Hazard", tkey: "cat.monsoon", emoji: "🌧️", color: "#4A8DB0" },
   { id: "other", label: "Other Issue", tkey: "cat.other", emoji: "⚠️", color: "#6B6558" },
 ];
 
-const catInfo = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES[4];
+// Sub-types shown when the Monsoon Hazard category is chosen in the report form.
+const MONSOON_SUBTYPES = [
+  { id: "waterlogging", tkey: "sub.waterlogging", emoji: "💧" },
+  { id: "treefall", tkey: "sub.treefall", emoji: "🌳" },
+  { id: "manhole", tkey: "sub.manhole", emoji: "🕳️" },
+  { id: "wall", tkey: "sub.wall", emoji: "🧱" },
+  { id: "power", tkey: "sub.power", emoji: "⚡" },
+  { id: "other", tkey: "sub.other", emoji: "🌧️" },
+];
+
+const catInfo = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES.find((c) => c.id === "other");
 
 const CONTACT_CATEGORIES = [
   { id: "police", label: "Police", tkey: "dir.police", color: "#3B5F7D", emoji: "🚓" },
@@ -725,6 +736,7 @@ function HomeScreen({ onReport, onGoToMap, onGoToDirectory }) {
 function ReportModal({ pendingLocation, onCancel, onSubmit, onRequestPin }) {
   const { t } = useLang();
   const [category, setCategory] = useState("traffic");
+  const [subtype, setSubtype] = useState("waterlogging");
   const [description, setDescription] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -758,9 +770,18 @@ function ReportModal({ pendingLocation, onCancel, onSubmit, onRequestPin }) {
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSaving(true);
+    // For monsoon reports, prefix the specific hazard type (in English, so it's
+    // stored language-independently) to the description.
+    let finalDesc = description.trim();
+    if (category === "monsoon") {
+      const sub = MONSOON_SUBTYPES.find((s) => s.id === subtype);
+      const subLabelEn = sub ? t("sub." + subtype) : "";
+      // Store using the English label for consistency in the database.
+      finalDesc = (subLabelEn ? subLabelEn + ": " : "") + finalDesc;
+    }
     await onSubmit({
       category,
-      description: description.trim(),
+      description: finalDesc,
       reporter_name: name.trim(),
       reporter_phone: phone.trim(),
       lat: pendingLocation.lat,
@@ -808,6 +829,25 @@ function ReportModal({ pendingLocation, onCancel, onSubmit, onRequestPin }) {
             </button>
           ))}
         </div>
+
+        {category === "monsoon" && (
+          <>
+            <label className="field-label">{t("report.subtype")}</label>
+            <div className="cat-select-row">
+              {MONSOON_SUBTYPES.map((s) => (
+                <button
+                  key={s.id}
+                  className={"cat-select" + (subtype === s.id ? " cat-select--active" : "")}
+                  style={subtype === s.id ? { borderColor: "#4A8DB0", color: "#4A8DB0" } : undefined}
+                  onClick={() => setSubtype(s.id)}
+                  type="button"
+                >
+                  {s.emoji} {t(s.tkey)}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         <label className="field-label" htmlFor="r-desc">{t("report.whatHappening")}</label>
         <textarea
