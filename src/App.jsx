@@ -451,8 +451,52 @@ function Directory({ contacts, loading }) {
   const [activeCat, setActiveCat] = useState("all");
   const [reporting, setReporting] = useState(null);
   const [thanksFor, setThanksFor] = useState(null);
+  const [myPos, setMyPos] = useState(null);
+  const [nearest, setNearest] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [locErr, setLocErr] = useState(null);
 
-  const filtered = (contacts || []).filter((c) => {
+  const distKm = (lat1, lng1, lat2, lng2) => {
+    const R = 6371;
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  };
+
+  const toggleNearest = () => {
+    if (nearest) {
+      setNearest(false);
+      return;
+    }
+    if (myPos) {
+      setNearest(true);
+      return;
+    }
+    if (!navigator.geolocation) {
+      setLocErr(t("dir.locationDenied"));
+      return;
+    }
+    setLocating(true);
+    setLocErr(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setMyPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setNearest(true);
+        setLocating(false);
+      },
+      () => {
+        setLocErr(t("dir.locationDenied"));
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  let filtered = (contacts || []).filter((c) => {
     const matchesCat = activeCat === "all" || c.category === activeCat;
     const matchesSearch =
       !search.trim() ||
@@ -460,6 +504,26 @@ function Directory({ contacts, loading }) {
       (c.area || "").toLowerCase().includes(search.toLowerCase());
     return matchesCat && matchesSearch;
   });
+
+  // Attach distance and sort when "nearest" is active.
+  if (nearest && myPos) {
+    filtered = filtered
+      .map((c) => ({
+        ...c,
+        _dist:
+          c.lat != null && c.lng != null
+            ? distKm(myPos.lat, myPos.lng, c.lat, c.lng)
+            : null,
+      }))
+      .sort((a, b) => {
+        // Entries with a distance come first, nearest to farthest;
+        // location-less entries (mobile helplines) sink to the bottom.
+        if (a._dist == null && b._dist == null) return 0;
+        if (a._dist == null) return 1;
+        if (b._dist == null) return -1;
+        return a._dist - b._dist;
+      });
+  }
 
   return (
     <div className="directory">
@@ -472,7 +536,16 @@ function Directory({ contacts, loading }) {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+        <button
+          className={"nearest-btn" + (nearest ? " nearest-btn--on" : "")}
+          onClick={toggleNearest}
+          disabled={locating}
+        >
+          {locating ? <Loader2 size={14} className="spin" /> : <Locate size={14} strokeWidth={2.2} />}
+          <span className="nearest-btn-label">{locating ? t("dir.locating") : t("dir.nearest")}</span>
+        </button>
       </div>
+      {locErr && <div className="directory-locerr">{locErr}</div>}
       <div className="cat-filter-bar">
         <button
           className={"cat-chip" + (activeCat === "all" ? " cat-chip--active" : "")}
@@ -510,6 +583,11 @@ function Directory({ contacts, loading }) {
                     {t(cat.tkey)}
                   </span>
                   {c.area && <span className="contact-area">{c.area}</span>}
+                  {nearest && c._dist != null && (
+                    <span className="contact-dist">
+                      {c._dist < 1 ? Math.round(c._dist * 1000) + " m" : c._dist.toFixed(1) + " " + t("dir.km")}
+                    </span>
+                  )}
                 </div>
                 <h3 className="contact-name">{c.name}</h3>
                 {c.address && <p className="contact-address">{c.address}</p>}
@@ -1350,8 +1428,15 @@ export default function App() {
         .view-toggle-btn--active { background: #2A2E38; color: #EDEBE4; }
         .directory-body { flex: 1; overflow-y: auto; background: #1A1D24; }
         .directory { max-width: 720px; margin: 0 auto; padding: 16px; }
-        .directory-search-row { margin-bottom: 10px; }
-        .directory-search { display: flex; align-items: center; gap: 8px; background: #1E212A; border: 1px solid #2A2E38; border-radius: 8px; padding: 9px 12px; color: #8A8E9A; }
+        .directory-search-row { margin-bottom: 10px; display: flex; gap: 8px; align-items: stretch; }
+        .directory-search { flex: 1; display: flex; align-items: center; gap: 8px; background: #1E212A; border: 1px solid #2A2E38; border-radius: 8px; padding: 9px 12px; color: #8A8E9A; }
+        .nearest-btn { display: inline-flex; align-items: center; gap: 6px; background: #1E212A; border: 1px solid #2A2E38; border-radius: 8px; padding: 9px 12px; color: #8A8E9A; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .nearest-btn:hover { border-color: #6B6F7A; color: #EDEBE4; }
+        .nearest-btn--on { border-color: #2E6E8E; color: #6BA8C4; background: rgba(46,110,142,0.12); }
+        .nearest-btn:disabled { opacity: 0.6; }
+        .directory-locerr { font-size: 11.5px; color: #C13B3B; margin: -4px 0 8px; }
+        .contact-dist { font-size: 11.5px; font-weight: 700; color: #6BA8C4; font-family: 'IBM Plex Mono', monospace; margin-left: 8px; }
+        @media (max-width: 480px) { .nearest-btn-label { display: none; } }
         .directory-search input { flex: 1; background: none; border: none; color: #EDEBE4; font-size: 14px; font-family: 'Inter', sans-serif; }
         .directory-search input:focus { outline: none; }
         .directory-list { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
@@ -1359,6 +1444,7 @@ export default function App() {
         .contact-card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
         .contact-cat-badge { font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; border: 1px solid; border-radius: 4px; padding: 2px 7px; }
         .contact-area { font-size: 11.5px; color: #6B6F7A; margin-left: auto; }
+        .contact-card-top { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
         .contact-name { font-size: 15.5px; font-weight: 700; margin: 0 0 4px; }
         .contact-address { font-size: 12.5px; color: #8A8E9A; margin: 0 0 10px; line-height: 1.5; }
         .contact-phones { display: flex; gap: 8px; flex-wrap: wrap; }
