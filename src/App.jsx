@@ -1,6 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import { AlertTriangle, X, ThumbsUp, ThumbsDown, Loader2, MapPin, Bell, BellOff, CheckCircle2, Phone, Search, Map as MapIcon, BookOpen, Camera, Locate, Share2, Flag, Eye } from "lucide-react";
+import React, { useState, useEffect, useRef, useCallback, createContext, useContext } from "react";
+import { AlertTriangle, X, ThumbsUp, ThumbsDown, Loader2, MapPin, Bell, BellOff, CheckCircle2, Phone, Search, Map as MapIcon, BookOpen, Camera, Locate, Share2, Flag, Eye, Globe } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
+import { LANGUAGES, makeT } from "./i18n";
+
+const LANG_KEY = "sentinel_lang";
+const LangContext = createContext({ lang: "en", t: makeT("en"), setLang: () => {} });
+const useLang = () => useContext(LangContext);
 
 const LEAFLET_CSS_ID = "leaflet-css";
 const LEAFLET_JS_ID = "leaflet-js";
@@ -105,22 +110,22 @@ function ensureLeaflet() {
 }
 
 const CATEGORIES = [
-  { id: "traffic", label: "Traffic Jam", emoji: "🚗", color: "#C9862B" },
-  { id: "blockage", label: "Blockage", emoji: "🚧", color: "#B8562F" },
-  { id: "fire", label: "Fire", emoji: "🔥", color: "#C13B3B" },
-  { id: "flood", label: "Flood / Disaster", emoji: "🌊", color: "#2E6E8E" },
-  { id: "other", label: "Other Issue", emoji: "⚠️", color: "#6B6558" },
+  { id: "traffic", label: "Traffic Jam", tkey: "cat.traffic", emoji: "🚗", color: "#C9862B" },
+  { id: "blockage", label: "Blockage", tkey: "cat.blockage", emoji: "🚧", color: "#B8562F" },
+  { id: "fire", label: "Fire", tkey: "cat.fire", emoji: "🔥", color: "#C13B3B" },
+  { id: "flood", label: "Flood / Disaster", tkey: "cat.flood", emoji: "🌊", color: "#2E6E8E" },
+  { id: "other", label: "Other Issue", tkey: "cat.other", emoji: "⚠️", color: "#6B6558" },
 ];
 
 const catInfo = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES[4];
 
 const CONTACT_CATEGORIES = [
-  { id: "police", label: "Police", color: "#3B5F7D", emoji: "🚓" },
-  { id: "fire", label: "Fire", color: "#C13B3B", emoji: "🚒" },
-  { id: "medical", label: "Medical", color: "#4A9A5A", emoji: "🏥" },
-  { id: "bmc", label: "BMC / Civic", color: "#C9862B", emoji: "🏛️" },
-  { id: "pwd", label: "PWD / CPWD", color: "#8B6BAE", emoji: "🛠️" },
-  { id: "other", label: "Other", color: "#6B6F7A", emoji: "📍" },
+  { id: "police", label: "Police", tkey: "dir.police", color: "#3B5F7D", emoji: "🚓" },
+  { id: "fire", label: "Fire", tkey: "dir.fire", color: "#C13B3B", emoji: "🚒" },
+  { id: "medical", label: "Medical", tkey: "dir.medical", color: "#4A9A5A", emoji: "🏥" },
+  { id: "bmc", label: "BMC / Civic", tkey: "dir.bmc", color: "#C9862B", emoji: "🏛️" },
+  { id: "pwd", label: "PWD / CPWD", tkey: "dir.pwd", color: "#8B6BAE", emoji: "🛠️" },
+  { id: "other", label: "Other", tkey: "dir.other", color: "#6B6F7A", emoji: "📍" },
 ];
 
 const contactCatInfo = (id) => CONTACT_CATEGORIES.find((c) => c.id === id) || CONTACT_CATEGORIES[5];
@@ -145,6 +150,11 @@ function expiresIn(iso) {
 }
 
 function Header({ view, onViewChange, onReportClick, alertCount, onClearAlerts, pushState, onTogglePush }) {
+  const { t, lang, setLang } = useLang();
+  const nextLang = () => {
+    const idx = LANGUAGES.findIndex((l) => l.code === lang);
+    setLang(LANGUAGES[(idx + 1) % LANGUAGES.length].code);
+  };
   return (
     <div className="header-bar">
       <div className="header-left">
@@ -157,17 +167,21 @@ function Header({ view, onViewChange, onReportClick, alertCount, onClearAlerts, 
             className={"view-toggle-btn" + (view === "map" ? " view-toggle-btn--active" : "")}
             onClick={() => onViewChange("map")}
           >
-            <MapIcon size={13} strokeWidth={2.2} /> Map
+            <MapIcon size={13} strokeWidth={2.2} /> {t("nav.map")}
           </button>
           <button
             className={"view-toggle-btn" + (view === "directory" ? " view-toggle-btn--active" : "")}
             onClick={() => onViewChange("directory")}
           >
-            <BookOpen size={13} strokeWidth={2.2} /> Directory
+            <BookOpen size={13} strokeWidth={2.2} /> {t("nav.directory")}
           </button>
         </div>
       </div>
       <div className="header-right">
+        <button className="lang-toggle" onClick={nextLang} title="Language / भाषा">
+          <Globe size={14} strokeWidth={2.2} />
+          <span>{LANGUAGES.find((l) => l.code === lang)?.label}</span>
+        </button>
         {alertCount > 0 && (
           <button className="alert-badge" onClick={onClearAlerts}>
             <Bell size={13} strokeWidth={2.2} />
@@ -179,7 +193,7 @@ function Header({ view, onViewChange, onReportClick, alertCount, onClearAlerts, 
             className={"notify-btn" + (pushState === "on" ? " notify-btn--on" : "")}
             onClick={onTogglePush}
             disabled={pushState === "busy"}
-            title={pushState === "on" ? "Alerts on — tap to turn off" : "Get alerts for incidents near you"}
+            title={pushState === "on" ? t("nav.alertsOnTip") : t("nav.getAlertsTip")}
           >
             {pushState === "busy" ? (
               <Loader2 size={15} className="spin" />
@@ -188,12 +202,12 @@ function Header({ view, onViewChange, onReportClick, alertCount, onClearAlerts, 
             ) : (
               <BellOff size={15} strokeWidth={2.2} />
             )}
-            <span className="notify-btn-label">{pushState === "on" ? "Alerts on" : "Get alerts"}</span>
+            <span className="notify-btn-label">{pushState === "on" ? t("nav.alertsOn") : t("nav.getAlerts")}</span>
           </button>
         )}
         <button className="report-btn" onClick={onReportClick}>
           <AlertTriangle size={15} strokeWidth={2.2} />
-          Report incident
+          {t("nav.report")}
         </button>
       </div>
     </div>
@@ -201,6 +215,7 @@ function Header({ view, onViewChange, onReportClick, alertCount, onClearAlerts, 
 }
 
 function CategoryFilterBar({ active, onToggle }) {
+  const { t } = useLang();
   return (
     <div className="cat-filter-bar">
       {CATEGORIES.map((c) => (
@@ -210,7 +225,7 @@ function CategoryFilterBar({ active, onToggle }) {
           onClick={() => onToggle(c.id)}
           style={active.has(c.id) ? { borderColor: c.color, color: c.color } : undefined}
         >
-          <span>{c.emoji}</span> {c.label}
+          <span>{c.emoji}</span> {t(c.tkey)}
         </button>
       ))}
     </div>
@@ -218,30 +233,30 @@ function CategoryFilterBar({ active, onToggle }) {
 }
 
 function NamePrompt({ onConfirm, onCancel }) {
+  const { t } = useLang();
   const [name, setName] = useState("");
   return (
     <div className="modal-overlay">
       <div className="modal" style={{ maxWidth: 360 }}>
         <div className="modal-header">
-          <h2 className="modal-title">Your name</h2>
-          <button className="icon-btn" onClick={onCancel} aria-label="Cancel">
+          <h2 className="modal-title">{t("name.title")}</h2>
+          <button className="icon-btn" onClick={onCancel} aria-label={t("common.close")}>
             <X size={18} />
           </button>
         </div>
         <p className="privacy-note" style={{ marginTop: 0 }}>
-          We ask once so votes are tied to a real person, not anonymous clicks.
-          Your browser will remember it after this.
+          {t("name.blurb")}
         </p>
         <input
           className="field-input"
-          placeholder="Your name"
+          placeholder={t("report.yourName")}
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && name.trim() && onConfirm(name.trim())}
         />
         <div className="modal-actions">
           <button className="btn-primary" disabled={!name.trim()} onClick={() => onConfirm(name.trim())}>
-            Continue
+            {t("name.continue")}
           </button>
         </div>
       </div>
@@ -250,8 +265,9 @@ function NamePrompt({ onConfirm, onCancel }) {
 }
 
 function IncidentList({ incidents, onSelect, onVote, onResolve, onConfirm, selectedId, myVotes, ownedIds }) {
+  const { t } = useLang();
   if (incidents.length === 0) {
-    return <div className="empty-list">No incidents reported in this view yet.</div>;
+    return <div className="empty-list">{t("map.empty")}</div>;
   }
   const sorted = [...incidents].sort((a, b) => {
     const scoreA = (a.upvotes || 0) - (a.downvotes || 0);
@@ -274,7 +290,7 @@ function IncidentList({ incidents, onSelect, onVote, onResolve, onConfirm, selec
           >
             <div className="incident-card-top">
               <span className="incident-emoji">{c.emoji}</span>
-              <span className="incident-cat" style={{ color: c.color }}>{c.label}</span>
+              <span className="incident-cat" style={{ color: c.color }}>{t(c.tkey)}</span>
               <span className="incident-time">{timeAgo(inc.created_at)}</span>
             </div>
             <p className="incident-desc">{inc.description}</p>
@@ -311,14 +327,14 @@ function IncidentList({ incidents, onSelect, onVote, onResolve, onConfirm, selec
                 disabled={inc.confirmedByMe}
               >
                 <Eye size={13} strokeWidth={2.2} />
-                {inc.confirmedByMe ? "You confirmed this" : "I see this too"}
+                {inc.confirmedByMe ? t("confirm.done") : t("confirm.action")}
                 {inc.confirmCount > 0 && <span className="confirm-count">{inc.confirmCount}</span>}
               </button>
             )}
             {isOwned && inc.confirmCount > 0 && (
               <div className="confirm-readonly">
                 <Eye size={13} strokeWidth={2.2} />
-                {inc.confirmCount} {inc.confirmCount === 1 ? "person confirms" : "people confirm"} this
+                {inc.confirmCount} {inc.confirmCount === 1 ? t("confirm.readonlyOne") : t("confirm.readonlyMany")}
               </div>
             )}
             <div className="incident-card-bottom">
@@ -332,7 +348,7 @@ function IncidentList({ incidents, onSelect, onVote, onResolve, onConfirm, selec
                   }}
                 >
                   <CheckCircle2 size={12} strokeWidth={2.2} />
-                  Mark resolved
+                  {t("inc.markResolved")}
                 </button>
               )}
             </div>
@@ -344,14 +360,15 @@ function IncidentList({ incidents, onSelect, onVote, onResolve, onConfirm, selec
 }
 
 const REPORT_REASONS = [
-  { id: "number_dead", label: "Number doesn't connect" },
-  { id: "number_wrong", label: "Wrong number / someone else" },
-  { id: "address_wrong", label: "Address is wrong" },
-  { id: "moved_closed", label: "Office moved or closed" },
-  { id: "other", label: "Something else" },
+  { id: "number_dead", tkey: "rc.reasonDead" },
+  { id: "number_wrong", tkey: "rc.reasonWrong" },
+  { id: "address_wrong", tkey: "rc.reasonAddress" },
+  { id: "moved_closed", tkey: "rc.reasonMoved" },
+  { id: "other", tkey: "rc.reasonOther" },
 ];
 
 function ReportContactModal({ contact, onCancel, onDone }) {
+  const { t } = useLang();
   const [reason, setReason] = useState(null);
   const [details, setDetails] = useState("");
   const [saving, setSaving] = useState(false);
@@ -373,7 +390,7 @@ function ReportContactModal({ contact, onCancel, onDone }) {
       if (error) throw error;
       onDone();
     } catch (e) {
-      setErr("Couldn't send: " + (e?.message || e));
+      setErr(t("err.reportSend") + (e?.message || e));
       setSaving(false);
     }
   };
@@ -382,15 +399,15 @@ function ReportContactModal({ contact, onCancel, onDone }) {
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal report-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2 className="modal-title">Report incorrect details</h2>
-          <button className="icon-btn" onClick={onCancel} aria-label="Close">
+          <h2 className="modal-title">{t("rc.title")}</h2>
+          <button className="icon-btn" onClick={onCancel} aria-label={t("common.close")}>
             <X size={18} />
           </button>
         </div>
 
         <p className="report-target">{contact.name}</p>
 
-        <label className="field-label">What's wrong?</label>
+        <label className="field-label">{t("rc.whatsWrong")}</label>
         <div className="reason-chips">
           {REPORT_REASONS.map((r) => (
             <button
@@ -399,17 +416,17 @@ function ReportContactModal({ contact, onCancel, onDone }) {
               className={"reason-chip" + (reason === r.id ? " reason-chip--active" : "")}
               onClick={() => setReason(r.id)}
             >
-              {r.label}
+              {t(r.tkey)}
             </button>
           ))}
         </div>
 
-        <label className="field-label" htmlFor="rc-details">Details (optional)</label>
+        <label className="field-label" htmlFor="rc-details">{t("rc.details")}</label>
         <textarea
           id="rc-details"
           className="field-textarea"
           rows={2}
-          placeholder="e.g. the correct number is..."
+          placeholder={t("rc.detailsPlaceholder")}
           value={details}
           onChange={(e) => setDetails(e.target.value)}
         />
@@ -417,10 +434,10 @@ function ReportContactModal({ contact, onCancel, onDone }) {
         {err && <p className="photo-error">{err}</p>}
 
         <div className="modal-actions">
-          <button className="btn-secondary" onClick={onCancel} type="button">Cancel</button>
+          <button className="btn-secondary" onClick={onCancel} type="button">{t("common.cancel")}</button>
           <button className="btn-primary" onClick={submit} disabled={!reason || saving} type="button">
             {saving ? <Loader2 size={14} className="spin" /> : null}
-            {saving ? "Sending…" : "Send report"}
+            {saving ? t("rc.sending") : t("rc.send")}
           </button>
         </div>
       </div>
@@ -429,6 +446,7 @@ function ReportContactModal({ contact, onCancel, onDone }) {
 }
 
 function Directory({ contacts, loading }) {
+  const { t } = useLang();
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("all");
   const [reporting, setReporting] = useState(null);
@@ -449,7 +467,7 @@ function Directory({ contacts, loading }) {
         <div className="directory-search">
           <Search size={14} strokeWidth={2.2} />
           <input
-            placeholder="Search by name or area…"
+            placeholder={t("dir.search")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -461,7 +479,7 @@ function Directory({ contacts, loading }) {
           onClick={() => setActiveCat("all")}
           style={activeCat === "all" ? { borderColor: "#EDEBE4", color: "#EDEBE4" } : undefined}
         >
-          All
+          {t("dir.all")}
         </button>
         {CONTACT_CATEGORIES.map((c) => (
           <button
@@ -470,7 +488,7 @@ function Directory({ contacts, loading }) {
             onClick={() => setActiveCat(c.id)}
             style={activeCat === c.id ? { borderColor: c.color, color: c.color } : undefined}
           >
-            {c.label}
+            {t(c.tkey)}
           </button>
         ))}
       </div>
@@ -478,10 +496,10 @@ function Directory({ contacts, loading }) {
       <div className="directory-list">
         {loading ? (
           <div className="loading-overlay" style={{ position: "static", height: 200 }}>
-            <Loader2 size={16} className="spin" /> Loading directory…
+            <Loader2 size={16} className="spin" /> {t("common.loading")}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="empty-list">No contacts match this search.</div>
+          <div className="empty-list">{t("dir.empty")}</div>
         ) : (
           filtered.map((c) => {
             const cat = contactCatInfo(c.category);
@@ -489,7 +507,7 @@ function Directory({ contacts, loading }) {
               <div className="contact-card" key={c.id}>
                 <div className="contact-card-top">
                   <span className="contact-cat-badge" style={{ color: cat.color, borderColor: cat.color }}>
-                    {cat.label}
+                    {t(cat.tkey)}
                   </span>
                   {c.area && <span className="contact-area">{c.area}</span>}
                 </div>
@@ -506,11 +524,11 @@ function Directory({ contacts, loading }) {
                 <div className="contact-card-foot">
                   {thanksFor === c.id ? (
                     <span className="report-thanks">
-                      <CheckCircle2 size={12} strokeWidth={2.2} /> Thanks — we'll check this
+                      <CheckCircle2 size={12} strokeWidth={2.2} /> {t("dir.reportThanks")}
                     </span>
                   ) : (
                     <button className="report-link" onClick={() => setReporting(c)} type="button">
-                      <Flag size={11} strokeWidth={2.2} /> Report incorrect
+                      <Flag size={11} strokeWidth={2.2} /> {t("dir.reportIncorrect")}
                     </button>
                   )}
                 </div>
@@ -535,26 +553,27 @@ function Directory({ contacts, loading }) {
 }
 
 function OfficeLayerToggles({ activeLayers, onToggle, isOpen, onOpenChange, contactsWithLocation }) {
+  const { t } = useLang();
   const countFor = (catId) => contactsWithLocation.filter((c) => c.category === catId).length;
   return (
     <div className="layer-panel">
       <button className="layer-panel-toggle" onClick={() => onOpenChange(!isOpen)}>
         <MapIcon size={13} strokeWidth={2.2} />
-        Office pins
+        {t("pins.title")}
       </button>
       {isOpen && (
         <div className="layer-panel-body">
           {CONTACT_CATEGORIES.map((c) => (
             <div className="layer-row" key={c.id}>
               <span className="layer-row-label">
-                <span>{c.emoji}</span> {c.label}
+                <span>{c.emoji}</span> {t(c.tkey)}
                 <span className="layer-row-count">{countFor(c.id)}</span>
               </span>
               <button
                 className={"toggle-switch" + (activeLayers.has(c.id) ? " toggle-switch--on" : "")}
                 onClick={() => onToggle(c.id)}
                 style={activeLayers.has(c.id) ? { background: c.color } : undefined}
-                aria-label={`Toggle ${c.label} pins`}
+                aria-label={`${t(c.tkey)}`}
               >
                 <span className="toggle-knob" />
               </button>
@@ -567,6 +586,7 @@ function OfficeLayerToggles({ activeLayers, onToggle, isOpen, onOpenChange, cont
 }
 
 function HomeScreen({ onReport, onGoToMap, onGoToDirectory }) {
+  const { t } = useLang();
   const bgMapRef = useRef(null);
   const bgMapInstance = useRef(null);
 
@@ -603,20 +623,20 @@ function HomeScreen({ onReport, onGoToMap, onGoToDirectory }) {
           <h1 className="home-title">Mumbai Sentinel</h1>
         </div>
         <div className="home-tagline-box">
-          <p className="home-tagline">Report incidents anytime, anywhere — Mumbai's own incident reporting network.</p>
+          <p className="home-tagline">{t("home.tagline")}</p>
         </div>
         <div className="home-actions">
           <button className="home-btn home-btn--primary" onClick={onReport}>
             <AlertTriangle size={16} strokeWidth={2.2} />
-            Report Incident
+            {t("home.report")}
           </button>
           <button className="home-btn home-btn--secondary" onClick={onGoToMap}>
             <MapIcon size={16} strokeWidth={2.2} />
-            Go to Map
+            {t("home.goMap")}
           </button>
           <button className="home-btn home-btn--secondary" onClick={onGoToDirectory}>
             <BookOpen size={16} strokeWidth={2.2} />
-            Go to Directory
+            {t("home.goDirectory")}
           </button>
         </div>
       </div>
@@ -625,6 +645,7 @@ function HomeScreen({ onReport, onGoToMap, onGoToDirectory }) {
 }
 
 function ReportModal({ pendingLocation, onCancel, onSubmit, onRequestPin }) {
+  const { t } = useLang();
   const [category, setCategory] = useState("traffic");
   const [description, setDescription] = useState("");
   const [name, setName] = useState("");
@@ -650,7 +671,7 @@ function ReportModal({ pendingLocation, onCancel, onSubmit, onRequestPin }) {
       const { data } = supabase.storage.from("incident-photos").getPublicUrl(path);
       setPhotoUrl(data.publicUrl);
     } catch (err) {
-      setPhotoError("Couldn't upload photo: " + err.message);
+      setPhotoError(t("err.photo") + err.message);
     } finally {
       setUploadingPhoto(false);
     }
@@ -675,27 +696,27 @@ function ReportModal({ pendingLocation, onCancel, onSubmit, onRequestPin }) {
     <div className="modal-overlay">
       <div className="modal">
         <div className="modal-header">
-          <h2 className="modal-title">Report an incident</h2>
-          <button className="icon-btn" onClick={onCancel} aria-label="Cancel">
+          <h2 className="modal-title">{t("report.title")}</h2>
+          <button className="icon-btn" onClick={onCancel} aria-label={t("common.cancel")}>
             <X size={18} />
           </button>
         </div>
 
-        <label className="field-label">Location</label>
+        <label className="field-label">{t("report.location")}</label>
         {pendingLocation ? (
           <div className="location-chip">
             <MapPin size={14} strokeWidth={2.2} />
             {pendingLocation.lat.toFixed(4)}, {pendingLocation.lng.toFixed(4)}
-            <button className="location-change" onClick={onRequestPin}>change</button>
+            <button className="location-change" onClick={onRequestPin}>{t("report.change")}</button>
           </div>
         ) : (
           <button className="location-pick-btn" onClick={onRequestPin}>
             <MapPin size={14} strokeWidth={2.2} />
-            Tap to drop a pin on the map
+            {t("report.dropPinBtn")}
           </button>
         )}
 
-        <label className="field-label">Category</label>
+        <label className="field-label">{t("report.category")}</label>
         <div className="cat-select-row">
           {CATEGORIES.map((c) => (
             <button
@@ -705,22 +726,22 @@ function ReportModal({ pendingLocation, onCancel, onSubmit, onRequestPin }) {
               onClick={() => setCategory(c.id)}
               type="button"
             >
-              {c.emoji} {c.label}
+              {c.emoji} {t(c.tkey)}
             </button>
           ))}
         </div>
 
-        <label className="field-label" htmlFor="r-desc">What's happening?</label>
+        <label className="field-label" htmlFor="r-desc">{t("report.whatHappening")}</label>
         <textarea
           id="r-desc"
           className="field-textarea"
-          placeholder="Brief description of the incident"
+          placeholder={t("report.descPlaceholder")}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={3}
         />
 
-        <label className="field-label">Photo (optional)</label>
+        <label className="field-label">{t("report.photo")}</label>
         <input
           ref={fileInputRef}
           type="file"
@@ -733,7 +754,7 @@ function ReportModal({ pendingLocation, onCancel, onSubmit, onRequestPin }) {
           <div className="photo-preview">
             <img src={photoUrl} alt="incident" />
             <button className="photo-remove" onClick={() => setPhotoUrl(null)} type="button">
-              <X size={14} /> Remove
+              <X size={14} /> {t("report.remove")}
             </button>
           </div>
         ) : (
@@ -744,28 +765,28 @@ function ReportModal({ pendingLocation, onCancel, onSubmit, onRequestPin }) {
             disabled={uploadingPhoto}
           >
             {uploadingPhoto ? <Loader2 size={15} className="spin" /> : <Camera size={15} strokeWidth={2.2} />}
-            {uploadingPhoto ? "Uploading…" : "Add a photo"}
+            {uploadingPhoto ? t("report.uploading") : t("report.addPhoto")}
           </button>
         )}
         {photoError && <p className="photo-error">{photoError}</p>}
 
         <div className="field-row">
           <div style={{ flex: 1 }}>
-            <label className="field-label" htmlFor="r-name">Your name</label>
+            <label className="field-label" htmlFor="r-name">{t("report.yourName")}</label>
             <input
               id="r-name"
               className="field-input"
-              placeholder="Full name"
+              placeholder={t("report.namePlaceholder")}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
           </div>
           <div style={{ flex: 1 }}>
-            <label className="field-label" htmlFor="r-phone">Phone number</label>
+            <label className="field-label" htmlFor="r-phone">{t("report.phone")}</label>
             <input
               id="r-phone"
               className="field-input"
-              placeholder="10-digit number"
+              placeholder={t("report.phonePlaceholder")}
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               type="tel"
@@ -773,14 +794,14 @@ function ReportModal({ pendingLocation, onCancel, onSubmit, onRequestPin }) {
           </div>
         </div>
         <p className="privacy-note">
-          Your name and number help others trust the report. Only your name is shown publicly — not your phone number.
+          {t("report.privacyNote")}
         </p>
 
         <div className="modal-actions">
-          <button className="btn-secondary" onClick={onCancel} type="button">Cancel</button>
+          <button className="btn-secondary" onClick={onCancel} type="button">{t("common.cancel")}</button>
           <button className="btn-primary" onClick={handleSubmit} disabled={!canSubmit || saving} type="button">
             {saving ? <Loader2 size={15} className="spin" /> : null}
-            {saving ? "Submitting…" : "Submit report"}
+            {saving ? t("report.submitting") : t("report.submit")}
           </button>
         </div>
       </div>
@@ -809,6 +830,12 @@ export default function App() {
   const [pendingConfirm, setPendingConfirm] = useState(null);
   const [ownedIds, setOwnedIds] = useState(new Set());
   const [view, setView] = useState("home");
+  const [lang, setLangState] = useState(() => localStorage.getItem(LANG_KEY) || "en");
+  const t = makeT(lang);
+  const setLang = (code) => {
+    localStorage.setItem(LANG_KEY, code);
+    setLangState(code);
+  };
   const [contacts, setContacts] = useState(null);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [officeLayers, setOfficeLayers] = useState(new Set());
@@ -832,7 +859,7 @@ export default function App() {
       .then(({ data, error: err }) => {
         setContactsLoading(false);
         if (err) {
-          setError("Couldn't load directory: " + err.message);
+          setError(t("err.loadDirectory") + err.message);
           setContacts([]);
           return;
         }
@@ -849,7 +876,7 @@ export default function App() {
       .gte("last_confirmed_at", cutoff)
       .order("created_at", { ascending: false });
     if (err) {
-      setError("Couldn't load incidents: " + err.message);
+      setError(t("err.loadIncidents") + err.message);
       setIncidents([]);
       return;
     }
@@ -1023,14 +1050,14 @@ export default function App() {
       }
 
       if (!VAPID_PUBLIC_KEY) {
-        setError("Alerts aren't configured yet (missing VAPID key).");
+        setError(t("err.alertsConfig"));
         setPushState("off");
         return;
       }
 
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
-        setError("Alerts need notification permission. You can enable it in browser settings.");
+        setError(t("err.alertsPermission"));
         setPushState("off");
         return;
       }
@@ -1058,7 +1085,7 @@ export default function App() {
 
       setPushState("on");
     } catch (e) {
-      setError("Couldn't set up alerts: " + (e?.message || e));
+      setError(t("err.alertsSetup") + (e?.message || e));
       setPushState("off");
     }
   };
@@ -1068,7 +1095,7 @@ export default function App() {
 
   const handleLocateMe = () => {
     if (!navigator.geolocation || !mapInstance.current) {
-      setError("Location isn't available on this device.");
+      setError(t("err.locationUnavailable"));
       return;
     }
     setLocating(true);
@@ -1089,7 +1116,7 @@ export default function App() {
       },
       () => {
         setLocating(false);
-        setError("Couldn't get your location. Check location permissions.");
+        setError(t("err.locationFailed"));
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
@@ -1118,7 +1145,7 @@ export default function App() {
       .from("incidents")
       .insert([{ id, ...data, resolved: false, owner_token: ownerToken, last_confirmed_at: new Date().toISOString() }]);
     if (err) {
-      setError("Couldn't submit: " + err.message);
+      setError(t("err.submit") + err.message);
       return;
     }
     saveOwnedReport(id, ownerToken);
@@ -1145,7 +1172,7 @@ export default function App() {
       .eq("id", incidentId)
       .eq("owner_token", token);
     if (err) {
-      setError("Couldn't mark resolved: " + err.message);
+      setError(t("err.resolve") + err.message);
       return;
     }
     setIncidents((prev) => prev.filter((inc) => inc.id !== incidentId));
@@ -1159,7 +1186,7 @@ export default function App() {
         { onConflict: "incident_id,voter_name" }
       );
     if (err) {
-      setError("Couldn't register your vote: " + err.message);
+      setError(t("err.vote") + err.message);
       return;
     }
     await loadIncidents(false);
@@ -1180,7 +1207,7 @@ export default function App() {
       .insert({ incident_id: incidentId, confirmer_name: name });
     // 23505 = already confirmed by this person; harmless, not worth surfacing.
     if (err && err.code !== "23505") {
-      setError("Couldn't confirm: " + err.message);
+      setError(t("err.confirm") + err.message);
       return;
     }
     await loadIncidents(false);
@@ -1215,6 +1242,7 @@ export default function App() {
   const visibleIncidents = incidents ? incidents.filter((inc) => activeCats.has(inc.category)) : [];
 
   return (
+    <LangContext.Provider value={{ lang, t, setLang }}>
     <div className="app-root">
       <style>{`
         * { box-sizing: border-box; }
@@ -1224,6 +1252,8 @@ export default function App() {
         .header-logo-btn { display: inline-flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer; padding: 2px; }
         .header-title { font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
         .header-right { display: flex; align-items: center; gap: 10px; }
+        .lang-toggle { display: inline-flex; align-items: center; gap: 5px; background: transparent; color: #C8CCE0; border: 1px solid #3A3E4A; border-radius: 6px; padding: 6px 10px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+        .lang-toggle:hover { border-color: #6B6F7A; color: #EDEBE4; }
         .alert-badge { display: inline-flex; align-items: center; gap: 5px; background: #C13B3B; color: #fff; font-size: 11.5px; font-weight: 600; padding: 4px 9px; border-radius: 999px; font-family: 'IBM Plex Mono', monospace; border: none; cursor: pointer; }
         .notify-btn { display: inline-flex; align-items: center; gap: 6px; background: transparent; color: #8A8E9A; border: 1px solid #3A3E4A; border-radius: 6px; padding: 7px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
         .notify-btn:hover { border-color: #6B6F7A; color: #EDEBE4; }
@@ -1429,7 +1459,7 @@ export default function App() {
               contactsWithLocation={(contacts || []).filter((c) => c.lat != null && c.lng != null)}
             />
           )}
-          <button className="locate-btn" onClick={handleLocateMe} disabled={locating} aria-label="Find my location">
+          <button className="locate-btn" onClick={handleLocateMe} disabled={locating} aria-label={t("common.findLocation")}>
             {locating ? <Loader2 size={18} className="spin" /> : <Locate size={18} strokeWidth={2.2} />}
           </button>
           {error && <div className="error-toast">{error}</div>}
@@ -1481,5 +1511,6 @@ export default function App() {
         />
       )}
     </div>
+    </LangContext.Provider>
   );
 }
