@@ -103,6 +103,10 @@ export const STRINGS = {
   "dir.all": { en: "All", hi: "सभी", mr: "सर्व" },
   "dir.reportIncorrect": { en: "Report incorrect", hi: "गलत जानकारी बताएं", mr: "चुकीची माहिती कळवा" },
   "dir.reportThanks": { en: "Thanks — we'll check this", hi: "धन्यवाद — हम इसे जांचेंगे", mr: "धन्यवाद — आम्ही हे तपासू" },
+  "dir.nearest": { en: "Nearest to me", hi: "मेरे सबसे पास", mr: "माझ्या सर्वात जवळ" },
+  "dir.locating": { en: "Finding you…", hi: "आपको ढूंढ रहे हैं…", mr: "तुम्हाला शोधत आहे…" },
+  "dir.km": { en: "km", hi: "कि.मी.", mr: "कि.मी." },
+  "dir.locationDenied": { en: "Location unavailable — check permissions.", hi: "स्थान अनुपलब्ध — अनुमतियां जांचें।", mr: "स्थान उपलब्ध नाही — परवानग्या तपासा." },
 
   // Report-incorrect modal
   "rc.title": { en: "Report incorrect details", hi: "गलत विवरण बताएं", mr: "चुकीचा तपशील कळवा" },
