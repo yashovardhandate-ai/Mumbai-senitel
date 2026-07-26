@@ -19,6 +19,16 @@ export const STRINGS = {
   "cat.fire": { en: "Fire", hi: "आग", mr: "आग" },
   "cat.flood": { en: "Flood / Disaster", hi: "बाढ़ / आपदा", mr: "पूर / आपत्ती" },
   "cat.other": { en: "Other Issue", hi: "अन्य समस्या", mr: "इतर समस्या" },
+  "cat.monsoon": { en: "Monsoon Hazard", hi: "मानसून खतरा", mr: "पावसाळी धोका" },
+
+  // Monsoon sub-types
+  "sub.waterlogging": { en: "Waterlogging", hi: "जलभराव", mr: "पाणी साचणे" },
+  "sub.treefall": { en: "Tree / branch fall", hi: "पेड़ / शाखा गिरना", mr: "झाड / फांदी पडणे" },
+  "sub.manhole": { en: "Open manhole / drain", hi: "खुला मैनहोल / नाला", mr: "उघडे मॅनहोल / गटार" },
+  "sub.wall": { en: "Wall / structure danger", hi: "दीवार / ढांचे का खतरा", mr: "भिंत / बांधकाम धोका" },
+  "sub.power": { en: "Power outage", hi: "बिजली गुल", mr: "वीज खंडित" },
+  "sub.other": { en: "Other monsoon hazard", hi: "अन्य मानसून खतरा", mr: "इतर पावसाळी धोका" },
+  "report.subtype": { en: "Type of hazard", hi: "खतरे का प्रकार", mr: "धोक्याचा प्रकार" },
 
   // Directory category names
   "dir.police": { en: "Police", hi: "पुलिस", mr: "पोलीस" },
