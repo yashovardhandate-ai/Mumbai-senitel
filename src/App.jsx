@@ -277,6 +277,27 @@ function NamePrompt({ onConfirm, onCancel }) {
 
 function IncidentList({ incidents, onSelect, onVote, onResolve, onConfirm, selectedId, myVotes, ownedIds }) {
   const { t } = useLang();
+  const [copiedId, setCopiedId] = useState(null);
+
+  const shareIncident = async (inc) => {
+    const url = `${window.location.origin}/?incident=${encodeURIComponent(inc.id)}`;
+    const text = `${t("inc.shareText")}: ${inc.description}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Mumbai Sentinel", text, url });
+        return;
+      } catch {
+        // user cancelled the share sheet -- fall through to copy
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      setCopiedId(inc.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      // clipboard blocked; nothing more we can do silently
+    }
+  };
   if (incidents.length === 0) {
     return <div className="empty-list">{t("map.empty")}</div>;
   }
@@ -325,6 +346,17 @@ function IncidentList({ incidents, onSelect, onVote, onResolve, onConfirm, selec
                 }}
               >
                 <ThumbsDown size={13} strokeWidth={2.2} />
+              </button>
+              <button
+                className="share-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  shareIncident(inc);
+                }}
+                title={t("inc.share")}
+              >
+                <Share2 size={13} strokeWidth={2.2} />
+                {copiedId === inc.id && <span className="share-copied">{t("inc.linkCopied")}</span>}
               </button>
               <span className="reporter-name">— {inc.reporter_name}</span>
             </div>
@@ -1359,6 +1391,37 @@ export default function App() {
   const selectedIncident = incidents && incidents.find((i) => i.id === selectedId);
   const visibleIncidents = incidents ? incidents.filter((inc) => activeCats.has(inc.category)) : [];
 
+  // Deep link: /?incident=<id> opens that incident on the map.
+  const deepLinkDone = useRef(false);
+  useEffect(() => {
+    if (deepLinkDone.current) return;
+    if (!incidents || incidents.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const wanted = params.get("incident");
+    if (!wanted) {
+      deepLinkDone.current = true;
+      return;
+    }
+    const target = incidents.find((i) => i.id === wanted);
+    deepLinkDone.current = true;
+    if (!target) return; // expired or resolved -- just open normally
+    setView("map");
+    setSelectedId(target.id);
+    // Make sure its category isn't filtered out.
+    setActiveCats((prev) => {
+      const next = new Set(prev);
+      next.add(target.category);
+      return next;
+    });
+    setTimeout(() => {
+      if (mapInstance.current && target.lat != null && target.lng != null) {
+        mapInstance.current.setView([target.lat, target.lng], 16);
+      }
+    }, 350);
+    // Clean the URL so a refresh doesn't re-trigger it.
+    window.history.replaceState({}, "", window.location.pathname);
+  }, [incidents]);
+
   return (
     <LangContext.Provider value={{ lang, t, setLang }}>
     <div className="app-root">
@@ -1425,6 +1488,9 @@ export default function App() {
         .confirm-count { margin-left: auto; background: rgba(255,255,255,0.12); border-radius: 999px; padding: 1px 8px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
         .confirm-readonly { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding: 6px 10px; color: #6BA8C4; font-size: 11.5px; }
         .vote-score--neg { color: #C13B3B; }
+        .share-btn { display: inline-flex; align-items: center; gap: 5px; background: transparent; border: 1px solid #3A3E4A; border-radius: 6px; padding: 4px 8px; color: #8A8E9A; cursor: pointer; margin-left: 6px; }
+        .share-btn:hover { border-color: #6BA8C4; color: #6BA8C4; }
+        .share-copied { font-size: 10.5px; font-weight: 600; color: #4A9A5A; white-space: nowrap; }
         .reporter-name { margin-left: auto; font-size: 11px; color: #6B6F7A; }
         .incident-card-bottom { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid #2A2E38; }
         .expiry-label { font-size: 10.5px; color: #6B6F7A; font-family: 'IBM Plex Mono', monospace; }
