@@ -144,6 +144,23 @@ export const STRINGS = {
   // Office pins panel
   "pins.title": { en: "Office pins", hi: "कार्यालय पिन", mr: "कार्यालय पिन" },
 
+  // Hazard zones (persistent known-risk areas)
+  "haz.title": { en: "Known hazard zones", hi: "ज्ञात खतरे के क्षेत्र", mr: "ज्ञात धोक्याची ठिकाणे" },
+  "haz.flooding": { en: "Flood-prone", hi: "बाढ़ संभावित", mr: "पूरप्रवण" },
+  "haz.subway": { en: "Subways", hi: "सबवे", mr: "सबवे" },
+  "haz.landslide": { en: "Landslide risk", hi: "भूस्खलन जोखिम", mr: "भूस्खलन धोका" },
+  "haz.source": { en: "Source", hi: "स्रोत", mr: "स्रोत" },
+  "haz.confidence": { en: "Confidence", hi: "विश्वसनीयता", mr: "विश्वासार्हता" },
+  "haz.confHigh": { en: "high", hi: "उच्च", mr: "उच्च" },
+  "haz.confMedium": { en: "medium", hi: "मध्यम", mr: "मध्यम" },
+  "haz.confLow": { en: "low", hi: "कम", mr: "कमी" },
+  "haz.recurring": { en: "Recurring hazard — not a live report", hi: "बार-बार होने वाला खतरा — यह लाइव रिपोर्ट नहीं है", mr: "वारंवार घडणारा धोका — ही थेट नोंद नाही" },
+  "haz.disclaimer": {
+    en: "Known spots only — not a complete list.",
+    hi: "केवल ज्ञात स्थान — पूरी सूची नहीं।",
+    mr: "फक्त ज्ञात ठिकाणे — संपूर्ण यादी नाही.",
+  },
+
   // Errors (kept short; prefix + raw message appended in code)
   "err.loadIncidents": { en: "Couldn't load incidents: ", hi: "घटनाएं लोड नहीं हो सकीं: ", mr: "घटना लोड होऊ शकल्या नाहीत: " },
   "err.loadDirectory": { en: "Couldn't load directory: ", hi: "निर्देशिका लोड नहीं हो सकी: ", mr: "निर्देशिका लोड होऊ शकली नाही: " },
