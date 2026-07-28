@@ -118,7 +118,26 @@ const CATEGORIES = [
   { id: "other", label: "Other Issue", tkey: "cat.other", emoji: "⚠️", color: "#6B6558" },
 ];
 
-// Sub-types shown when the Monsoon Hazard category is chosen in the report form.
+// Persistent known-hazard zones. Rendered as translucent circles UNDER the
+// live incident markers -- background context, never competing with a live
+// report. Radius is indicative of the affected area, not a surveyed boundary.
+const HAZARD_TYPES = [
+  { id: "flooding", tkey: "haz.flooding", color: "#3E7CA6", fill: "#3E7CA6", radius: 220, emoji: "🌊" },
+  { id: "subway_flooding", tkey: "haz.subway", color: "#1F5C87", fill: "#1F5C87", radius: 130, emoji: "🚇" },
+  { id: "landslide", tkey: "haz.landslide", color: "#B07A3C", fill: "#B07A3C", radius: 200, emoji: "⛰️" },
+];
+
+const hazTypeInfo = (id) => HAZARD_TYPES.find((h) => h.id === id) || HAZARD_TYPES[0];
+
+// Monsoon in Mumbai runs roughly June-September. Flood layers default ON
+// during those months so a first-time visitor sees something useful even
+// with zero live reports; landslide stays off unless asked for, since it's
+// intensely local to specific hill settlements.
+function defaultHazardLayers() {
+  const m = new Date().getMonth(); // 0-indexed: 5=June, 8=September
+  const monsoon = m >= 5 && m <= 8;
+  return monsoon ? new Set(["flooding", "subway_flooding"]) : new Set();
+}
 const MONSOON_SUBTYPES = [
   { id: "waterlogging", tkey: "sub.waterlogging", emoji: "💧" },
   { id: "treefall", tkey: "sub.treefall", emoji: "🌳" },
@@ -673,6 +692,41 @@ function Directory({ contacts, loading }) {
   );
 }
 
+function HazardLayerToggles({ activeLayers, onToggle, zones, isOpen, onOpenChange }) {
+  const { t } = useLang();
+  const countFor = (typeId) =>
+    (zones || []).filter((z) => z.hazard_type === typeId && z.lat != null).length;
+  return (
+    <div className="layer-panel layer-panel--hazard">
+      <button className="layer-panel-toggle" onClick={() => onOpenChange(!isOpen)}>
+        <AlertTriangle size={13} strokeWidth={2.2} />
+        {t("haz.title")}
+      </button>
+      {isOpen && (
+        <div className="layer-panel-body">
+          {HAZARD_TYPES.map((h) => (
+            <div className="layer-row" key={h.id}>
+              <span className="layer-row-label">
+                <span>{h.emoji}</span> {t(h.tkey)}
+                <span className="layer-row-count">{countFor(h.id)}</span>
+              </span>
+              <button
+                className={"toggle-switch" + (activeLayers.has(h.id) ? " toggle-switch--on" : "")}
+                onClick={() => onToggle(h.id)}
+                style={activeLayers.has(h.id) ? { background: h.color } : undefined}
+                aria-label={`${t(h.tkey)}`}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </div>
+          ))}
+          <p className="layer-panel-note">{t("haz.disclaimer")}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OfficeLayerToggles({ activeLayers, onToggle, isOpen, onOpenChange, contactsWithLocation }) {
   const { t } = useLang();
   const countFor = (catId) => contactsWithLocation.filter((c) => c.category === catId).length;
@@ -989,7 +1043,11 @@ export default function App() {
   const [contacts, setContacts] = useState(null);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [officeLayers, setOfficeLayers] = useState(new Set());
+  const [hazardZones, setHazardZones] = useState(null);
+  const [hazardLayers, setHazardLayers] = useState(defaultHazardLayers);
+  const hazardShapesRef = useRef({});
   const [layerPanelOpen, setLayerPanelOpen] = useState(false);
+  const [hazardPanelOpen, setHazardPanelOpen] = useState(false);
   const contactMarkersRef = useRef({});
   const lastSeenRef = useRef(Date.now());
 
@@ -1014,6 +1072,22 @@ export default function App() {
           return;
         }
         setContacts(data);
+      });
+  }, []);
+
+  // Load persistent hazard zones. Deliberately fails silent: if the table
+  // doesn't exist yet or the query errors, the app carries on without the
+  // layer rather than showing an error over the map.
+  useEffect(() => {
+    supabase
+      .from("hazard_zones")
+      .select("*")
+      .then(({ data, error: err }) => {
+        if (err) {
+          setHazardZones([]);
+          return;
+        }
+        setHazardZones(data || []);
       });
   }, []);
 
@@ -1163,6 +1237,61 @@ export default function App() {
         contactMarkersRef.current[c.id] = marker;
       });
   }, [contacts, officeLayers]);
+
+  // Render hazard zones as translucent circles beneath the incident markers.
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map || !window.L || !hazardZones) return;
+    const L = window.L;
+    Object.values(hazardShapesRef.current).forEach((s) => map.removeLayer(s));
+    hazardShapesRef.current = {};
+
+    const confLabel = (c) =>
+      c === "high" ? t("haz.confHigh") : c === "low" ? t("haz.confLow") : t("haz.confMedium");
+
+    hazardZones
+      .filter((h) => h.lat != null && h.lng != null && hazardLayers.has(h.hazard_type))
+      .forEach((h) => {
+        const info = hazTypeInfo(h.hazard_type);
+        const isExtreme = h.severity === "extreme";
+        const circle = L.circle([h.lat, h.lng], {
+          radius: info.radius,
+          color: info.color,
+          weight: isExtreme ? 2 : 1,
+          opacity: isExtreme ? 0.75 : 0.5,
+          fillColor: info.fill,
+          fillOpacity: isExtreme ? 0.22 : 0.14,
+          interactive: true,
+        }).addTo(map);
+        // Keep hazard shapes visually behind live incident markers.
+        if (circle.bringToBack) circle.bringToBack();
+
+        circle.bindPopup(
+          `<div style="max-width:230px">
+            <div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:#8A8E9A;margin-bottom:3px">
+              ${info.emoji} ${t("haz.recurring")}
+            </div>
+            <strong>${h.name}</strong>
+            ${h.area ? `<div style="font-size:11.5px;color:#6B6F7A">${h.area}</div>` : ""}
+            ${h.description ? `<p style="margin:6px 0;font-size:12px;line-height:1.45">${h.description}</p>` : ""}
+            <div style="font-size:10.5px;color:#6B6F7A;border-top:1px solid #ddd;padding-top:5px;margin-top:5px">
+              ${t("haz.source")}: ${h.source || "—"}<br/>
+              ${t("haz.confidence")}: ${confLabel(h.confidence)}
+            </div>
+          </div>`
+        );
+        hazardShapesRef.current[h.id] = circle;
+      });
+  }, [hazardZones, hazardLayers, lang]);
+
+  const toggleHazardLayer = (typeId) => {
+    setHazardLayers((prev) => {
+      const next = new Set(prev);
+      if (next.has(typeId)) next.delete(typeId);
+      else next.add(typeId);
+      return next;
+    });
+  };
 
   const toggleOfficeLayer = (catId) => {
     setOfficeLayers((prev) => {
@@ -1557,6 +1686,8 @@ export default function App() {
         .contact-phone-btn { display: inline-flex; align-items: center; gap: 5px; background: #14161B; border: 1px solid #3A3E4A; border-radius: 6px; padding: 6px 10px; font-size: 12.5px; font-weight: 600; color: #4A9A5A; text-decoration: none; font-family: 'IBM Plex Mono', monospace; }
         .contact-phone-btn:hover { border-color: #4A9A5A; }
         .layer-panel { position: absolute; bottom: 16px; left: 16px; z-index: 500; }
+        .layer-panel--hazard { bottom: 62px; }
+        .layer-panel-note { margin: 8px 4px 2px; font-size: 10.5px; line-height: 1.4; color: #6B6F7A; border-top: 1px solid #2A2E38; padding-top: 7px; }
         .layer-panel-toggle { display: inline-flex; align-items: center; gap: 6px; background: #1E212A; border: 1px solid #3A3E4A; border-radius: 8px; padding: 8px 12px; color: #EDEBE4; font-size: 12.5px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
         .layer-panel-body { margin-top: 8px; background: #1E212A; border: 1px solid #3A3E4A; border-radius: 8px; padding: 10px; min-width: 220px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
         .layer-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 4px; }
@@ -1649,6 +1780,15 @@ export default function App() {
               isOpen={layerPanelOpen}
               onOpenChange={setLayerPanelOpen}
               contactsWithLocation={(contacts || []).filter((c) => c.lat != null && c.lng != null)}
+            />
+          )}
+          {!pinMode && (
+            <HazardLayerToggles
+              activeLayers={hazardLayers}
+              onToggle={toggleHazardLayer}
+              zones={hazardZones}
+              isOpen={hazardPanelOpen}
+              onOpenChange={setHazardPanelOpen}
             />
           )}
           <button className="locate-btn" onClick={handleLocateMe} disabled={locating} aria-label={t("common.findLocation")}>
