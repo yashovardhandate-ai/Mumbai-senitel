@@ -122,9 +122,9 @@ const CATEGORIES = [
 // live incident markers -- background context, never competing with a live
 // report. Radius is indicative of the affected area, not a surveyed boundary.
 const HAZARD_TYPES = [
-  { id: "flooding", tkey: "haz.flooding", color: "#3E7CA6", fill: "#3E7CA6", radius: 220, emoji: "🌊" },
-  { id: "subway_flooding", tkey: "haz.subway", color: "#1F5C87", fill: "#1F5C87", radius: 130, emoji: "🚇" },
-  { id: "landslide", tkey: "haz.landslide", color: "#B07A3C", fill: "#B07A3C", radius: 200, emoji: "⛰️" },
+  { id: "flooding", tkey: "haz.flooding", color: "#4FA8DC", fill: "#4FA8DC", radius: 320, emoji: "🌊" },
+  { id: "subway_flooding", tkey: "haz.subway", color: "#2E86C1", fill: "#2E86C1", radius: 200, emoji: "🚇" },
+  { id: "landslide", tkey: "haz.landslide", color: "#E09B3D", fill: "#E09B3D", radius: 290, emoji: "⛰️" },
 ];
 
 const hazTypeInfo = (id) => HAZARD_TYPES.find((h) => h.id === id) || HAZARD_TYPES[0];
@@ -1243,7 +1243,9 @@ export default function App() {
     const map = mapInstance.current;
     if (!map || !window.L || !hazardZones) return;
     const L = window.L;
-    Object.values(hazardShapesRef.current).forEach((s) => map.removeLayer(s));
+    Object.values(hazardShapesRef.current).forEach((layers) => {
+      (Array.isArray(layers) ? layers : [layers]).forEach((l) => map.removeLayer(l));
+    });
     hazardShapesRef.current = {};
 
     const confLabel = (c) =>
@@ -1257,14 +1259,32 @@ export default function App() {
         const circle = L.circle([h.lat, h.lng], {
           radius: info.radius,
           color: info.color,
-          weight: isExtreme ? 2 : 1,
-          opacity: isExtreme ? 0.75 : 0.5,
+          weight: isExtreme ? 3.5 : 2.5,
+          opacity: isExtreme ? 1 : 0.85,
+          dashArray: isExtreme ? null : "6 5",
           fillColor: info.fill,
-          fillOpacity: isExtreme ? 0.22 : 0.14,
+          fillOpacity: isExtreme ? 0.42 : 0.28,
           interactive: true,
         }).addTo(map);
-        // Keep hazard shapes visually behind live incident markers.
         if (circle.bringToBack) circle.bringToBack();
+
+        // Small badge at the centre so each zone is identifiable without tapping.
+        const badge = L.marker([h.lat, h.lng], {
+          icon: L.divIcon({
+            html: `<div style="
+              display:flex;align-items:center;justify-content:center;
+              width:26px;height:26px;border-radius:50%;
+              background:${info.color};border:2px solid rgba(255,255,255,0.9);
+              box-shadow:0 2px 6px rgba(0,0,0,0.45);
+              font-size:13px;line-height:1;
+              transform:translate(-50%,-50%);
+            ">${info.emoji}</div>`,
+            className: "",
+            iconSize: [0, 0],
+          }),
+          interactive: false,
+          zIndexOffset: -500,
+        }).addTo(map);
 
         circle.bindPopup(
           `<div style="max-width:230px">
@@ -1280,7 +1300,7 @@ export default function App() {
             </div>
           </div>`
         );
-        hazardShapesRef.current[h.id] = circle;
+        hazardShapesRef.current[h.id] = [circle, badge];
       });
   }, [hazardZones, hazardLayers, lang]);
 
