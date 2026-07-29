@@ -122,13 +122,13 @@ const CATEGORIES = [
 // live incident markers -- background context, never competing with a live
 // report. Radius is indicative of the affected area, not a surveyed boundary.
 const HAZARD_TYPES = [
-  { id: "flooding", tkey: "haz.flooding", color: "#4FA8DC", fill: "#4FA8DC", radius: 320, emoji: "🌊" },
-  { id: "subway_flooding", tkey: "haz.subway", color: "#2E86C1", fill: "#2E86C1", radius: 200, emoji: "🚇" },
-  { id: "landslide", tkey: "haz.landslide", color: "#E09B3D", fill: "#E09B3D", radius: 290, emoji: "⛰️" },
-  { id: "accident_blackspot", tkey: "haz.accident", color: "#D9534F", fill: "#D9534F", radius: 260, emoji: "🚨" },
-  { id: "unsafe_bridge", tkey: "haz.bridge", color: "#9B59B6", fill: "#9B59B6", radius: 180, emoji: "🌉" },
+  { id: "flooding", tkey: "haz.flooding", color: "#4FA8DC", fill: "#4FA8DC", radius: 210, emoji: "🌊" },
+  { id: "subway_flooding", tkey: "haz.subway", color: "#2E86C1", fill: "#2E86C1", radius: 150, emoji: "🚇" },
+  { id: "landslide", tkey: "haz.landslide", color: "#E09B3D", fill: "#E09B3D", radius: 190, emoji: "⛰️" },
+  { id: "accident_blackspot", tkey: "haz.accident", color: "#D9534F", fill: "#D9534F", radius: 190, emoji: "🚨" },
+  { id: "unsafe_bridge", tkey: "haz.bridge", color: "#9B59B6", fill: "#9B59B6", radius: 140, emoji: "🌉" },
   // Ward-level only, and OFF by default: this points at places people live.
-  { id: "dangerous_building", tkey: "haz.building", color: "#C0392B", fill: "#C0392B", radius: 700, emoji: "🏚️" },
+  { id: "dangerous_building", tkey: "haz.building", color: "#C0392B", fill: "#C0392B", radius: 550, emoji: "🏚️" },
 ];
 
 const hazTypeInfo = (id) => HAZARD_TYPES.find((h) => h.id === id) || HAZARD_TYPES[0];
@@ -1277,10 +1277,10 @@ export default function App() {
           icon: L.divIcon({
             html: `<div style="
               display:flex;align-items:center;justify-content:center;
-              width:34px;height:34px;border-radius:50%;
-              background:${info.color};border:2.5px solid rgba(255,255,255,0.95);
-              box-shadow:0 3px 10px rgba(0,0,0,0.55);
-              font-size:17px;line-height:1;
+              width:24px;height:24px;border-radius:50%;
+              background:${info.color};border:2px solid rgba(255,255,255,0.95);
+              box-shadow:0 2px 6px rgba(0,0,0,0.5);
+              font-size:12px;line-height:1;
               transform:translate(-50%,-50%);
             ">${info.emoji}</div>`,
             className: "",
